@@ -18,7 +18,7 @@ jobs:
       - name: Checkout the other repository
         uses: actions/checkout@v2
         with:
-          repository: '/git-ci-123/NAAP_PROJECT'
+          repository: 'git-ci-123/NAAP_PROJECT'
           token: ${{ secrets.GITHUB_TOKEN }}    
           path: 'NAAP_PROJECT'
           

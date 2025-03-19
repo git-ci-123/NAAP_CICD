@@ -23,6 +23,7 @@ jobs:
         with:
           repository: 'git-ci-123/NAAP_PROJECT'
           token: ${{ secrets.GITHUB_TOKEN }}    
+          ref: dev-manifest
           path: 'NAAP_PROJECT'
 
       - name: Check RDS Instance Connection

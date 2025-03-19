@@ -21,6 +21,10 @@ jobs:
           repository: 'git-ci-123/NAAP_PROJECT'
           token: ${{ secrets.GITHUB_TOKEN }}    
           path: 'NAAP_PROJECT'
+      
+      - name: Listing
+        run: |
+          ls-ltr
           
       - name: Check if the file has a .properties extension
         run: |

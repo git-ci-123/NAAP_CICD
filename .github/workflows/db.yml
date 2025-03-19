@@ -1,1 +1,46 @@
+name: Cleanslate Execution
 
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Release Path"
+        required: true
+        type: string
+
+jobs:
+  execute-rds-script:
+    runs-on: naap
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+      
+      - name: Checkout Project Repository
+        uses: actions/checkout@v2
+        with:
+          repository: 'git-ci-123/NAAP_PROJECT'
+          token: ${{ secrets.GITHUB_TOKEN }}    
+          path: 'NAAP_PROJECT'
+
+      - name: Check RDS Instance Connection
+        run: |
+          sudo apt-get update && sudo apt-get install -y telnet
+          if telnet naapdev.cric42eckumc.us-east-2.rds.amazonaws.com 1521; then
+            echo "Connection successful!"
+          else
+            echo "Connection failed!"
+            exit 1
+          fi
+
+      - name: Run Liquibase Migration
+        uses: liquibase/liquibase-github-action@v4
+        with:
+          operation: 'update'
+          classpath: 'script/APPCATALOG'
+          changeLogFile: 'changelog.sql'
+          url: "jdbc:oracle:thin:@simplifynode.c5islbzvpxom.us-east-1.rds.amazonaws.com:1521/SFYNODE"
+          username: "GALAXY_SHIELD_NAAP"
+          password: "GALAXY_SHIELD_NAAP"

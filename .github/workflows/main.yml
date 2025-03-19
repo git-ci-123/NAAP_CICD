@@ -24,7 +24,7 @@ jobs:
       
       - name: Listing
         run: |
-          ls-ltr
+          ls -ltr
           
       - name: Check if the file has a .properties extension
         run: |

@@ -9,7 +9,7 @@ on:
         type: string
 
 jobs:
-  execute-rds-script:
+  checkout:
     runs-on: naap
     permissions:
       id-token: write

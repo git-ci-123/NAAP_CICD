@@ -29,7 +29,7 @@ jobs:
           if [[ -f "NAAP_PROJECT/$FILE_PATH" && "$FILE_PATH" == *.properties ]]; then
             echo "Valid .properties file"
           elif [[ ! -f "NAAP_PROJECT/$FILE_PATH" ]]; then
-            echo "File does not exist at the given path"
+            echo "File does not exist in path"
             exit 1
           else
             echo "Invalid file type. The file does not have a .properties extension."

@@ -145,6 +145,20 @@ jobs:
       db: ${{ steps.extract.outputs.DB }}
     steps:
 
+      - name: Fetch and Checkout Release Folder from Target Repo
+        run: |
+          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
+
+          echo "Fetching release branch: $RELEASE_BRANCH from ${{ env.TARGET_REPO }}"
+          git fetch origin "$RELEASE_BRANCH" || { echo "::error::Branch $RELEASE_BRANCH not found!"; exit 1; }
+
+          echo "Checking out release folder from branch: $RELEASE_BRANCH"
+          git checkout origin/"$RELEASE_BRANCH" -- "$BASE_PATH" || { echo "::error::Release folder not found in $RELEASE_BRANCH!"; exit 1; }
+
+          [ -d "$BASE_PATH" ] || { echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"; exit 1; }
+
+      
       - name: Read Inputs from File
         id: extract
         run: |

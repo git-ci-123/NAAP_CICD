@@ -81,7 +81,9 @@ jobs:
           fi
 
   Property_deployment:
-    needs: DB_Execution
+    needs: 
+      - checkout
+      - DB_Execution
     runs-on: naap
     if: ${{ needs.checkout.outputs.property == 'true' }}
     steps:

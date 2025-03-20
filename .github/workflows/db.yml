@@ -11,9 +11,10 @@ on:
 jobs:
   checkout:
     runs-on: naap
-    permissions:
-      id-token: write
-      contents: read
+    outputs:
+      iteration: ${{ steps.extract.outputs.ITERATION }}
+      imagetag: ${{ steps.extract.outputs.IMAGETAG }}
+      db: ${{ steps.extract.outputs.DB }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
@@ -53,7 +54,7 @@ jobs:
   DB_Execution:
     needs: checkout
     runs-on: naap
-    if: ${{ needs.checkout.outputs.DB != '' }}
+    if: ${{ needs.checkout.outputs.db != '' }}
     steps:
       - name: Check RDS Instance Connection
         run: |

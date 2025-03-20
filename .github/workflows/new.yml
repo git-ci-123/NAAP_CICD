@@ -145,7 +145,7 @@ jobs:
       db: ${{ steps.extract.outputs.DB }}
     steps:
 
-      - name: Checkout Project Repository
+      - name: Checkout Project Repository - Release Branch
         uses: actions/checkout@v2
         with:
           repository: 'git-ci-123/NAAP_PROJECT'
@@ -198,7 +198,7 @@ jobs:
             fi
           done
           
-      - name: Checkout Project Repository
+      - name: Checkout Project Repository - Manifest Branch
         uses: actions/checkout@v2
         with:
           repository: 'git-ci-123/NAAP_PROJECT'

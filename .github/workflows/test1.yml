@@ -1,0 +1,29 @@
+name: Main Workflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  read-input:
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_target: ${{ steps.read.outputs.DEPLOY }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Read Input File
+        id: read
+        run: |
+          DEPLOY=$(grep 'DEPLOY=' input.txt | cut -d '=' -f2)
+          echo "DEPLOY=$DEPLOY" >> $GITHUB_ENV
+          echo "DEPLOY=$DEPLOY" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: read-input
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Deployment
+        uses: ./.github/actions/deploy
+        with:
+          target: ${{ needs.read-input.outputs.deploy_target }}

@@ -148,7 +148,7 @@ jobs:
       - name: Read Inputs from File
         id: extract
         run: |
-          RELEASE_VERSION=${{ inputs.release }}
+          RELEASE_VERSION=${{ inputs.BASE_PATH }}
           FILE_PATH="release/${RELEASE_VERSION}/input.txt"
 
           if [ ! -f "$FILE_PATH" ]; then
@@ -180,7 +180,7 @@ jobs:
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
             TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
 
-            YAML_FILE="external-repo/manifest/${SERVICE}.yaml" 
+            YAML_FILE="manifest/${SERVICE}.yaml" 
             if [ -f "$YAML_FILE" ]; then
               echo "Updating $YAML_FILE with image tag $TAG"
               sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"

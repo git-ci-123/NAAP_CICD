@@ -26,6 +26,34 @@ jobs:
           ref: releasemanagement
           path: 'NAAP_Release'
 
+      - name: Read Inputs from File
+        id: extract
+        run: |
+          RELEASE_VERSION=${{ inputs.release }}
+          FILE_PATH="${RELEASE_VERSION}/input.txt"
+
+          if [ ! -f "$FILE_PATH" ]; then
+            echo "File not found: $FILE_PATH"
+            exit 1
+          fi
+
+          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
+          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+
+          echo "ITERATION=$ITERATION"
+          echo "IMAGETAG=$IMAGETAG"
+          echo "DB=$DB"
+
+          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
+          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
+          echo "DB=$DB" >> $GITHUB_OUTPUT
+
+  DB_Execution:
+    needs: checkout
+    runs-on: naap
+    if: ${{ env.DB != '' }} 
+    steps:
       - name: Check RDS Instance Connection
         run: |
           sudo apt-get update && sudo apt-get install -y telnet

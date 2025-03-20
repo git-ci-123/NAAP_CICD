@@ -85,7 +85,8 @@ jobs:
       - checkout
       - DB_Execution
     runs-on: naap
-    if: ${{ needs.checkout.outputs.property == 'true' }}
+    if: |
+      (needs.checkout.outputs.property == 'true' && needs.DB_Execution.result == 'success')
     steps:
       - name: Deploy Properties Files
         run: |

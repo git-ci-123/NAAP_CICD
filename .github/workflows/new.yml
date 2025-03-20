@@ -149,7 +149,7 @@ jobs:
         id: extract
         run: |
           RELEASE_VERSION=${{ inputs.BASE_PATH }}
-          FILE_PATH="release/${RELEASE_VERSION}/input.txt"
+          FILE_PATH="${RELEASE_VERSION}/input.txt"
 
           if [ ! -f "$FILE_PATH" ]; then
             echo "File not found: $FILE_PATH"

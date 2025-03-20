@@ -15,6 +15,7 @@ jobs:
       iteration: ${{ steps.extract.outputs.ITERATION }}
       imagetag: ${{ steps.extract.outputs.IMAGETAG }}
       db: ${{ steps.extract.outputs.DB }}
+      property: ${{ steps.check_properties.outputs.property }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
@@ -50,6 +51,19 @@ jobs:
           echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
           echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
           echo "DB=$DB" >> $GITHUB_OUTPUT
+          
+      - name: Check for properties Files
+        id: check_properties
+        run: |
+          PROP_FILES=$(find NAAP_Release/${{ inputs.release }} -type f -name "*.properties" | wc -l)
+
+          if [ "$PROP_FILES" -gt 0 ]; then
+            echo "Properties files found: $PROP_FILES"
+            echo "property=true" >> $GITHUB_OUTPUT
+          else
+            echo "No properties files found"
+            echo "property=" >> $GITHUB_OUTPUT
+          fi
 
   DB_Execution:
     needs: checkout
@@ -65,3 +79,12 @@ jobs:
             echo "Connection failed!"
             exit 1
           fi
+
+  Property_deployment:
+    needs: checkout
+    runs-on: naap
+    if: ${{ needs.checkout.outputs.property == 'true' }}
+    steps:
+      - name: Deploy Properties Files
+        run: |
+          echo "Deploying properties files..."

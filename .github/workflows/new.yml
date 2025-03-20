@@ -45,7 +45,7 @@ jobs:
 
           [ -d "$BASE_PATH" ] || { echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"; exit 1; }
 
-      - name: Process Property File Changes (Auto-Create Missing Files)
+      - name: Process Property File Changes
         run: |
           BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
           LOG_FILE="property_changes.log"
@@ -145,25 +145,20 @@ jobs:
       db: ${{ steps.extract.outputs.DB }}
     steps:
 
-      - name: Fetch and Checkout Release Folder from Target Repo
-        run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
-          RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
-
-          echo "Fetching release branch: $RELEASE_BRANCH from ${{ env.TARGET_REPO }}"
-          git fetch origin "$RELEASE_BRANCH" || { echo "::error::Branch $RELEASE_BRANCH not found!"; exit 1; }
-
-          echo "Checking out release folder from branch: $RELEASE_BRANCH"
-          git checkout origin/"$RELEASE_BRANCH" -- "$BASE_PATH" || { echo "::error::Release folder not found in $RELEASE_BRANCH!"; exit 1; }
-
-          [ -d "$BASE_PATH" ] || { echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"; exit 1; }
+      - name: Checkout Project Repository
+        uses: actions/checkout@v2
+        with:
+          repository: 'git-ci-123/NAAP_PROJECT'
+          token: ${{ secrets.GITHUB_TOKEN }}    
+          ref: releasemanagement
+          path: 'NAAP_Release'
 
       
       - name: Read Inputs from File
         id: extract
         run: |
           RELEASE_VERSION=${{ inputs.BASE_PATH }}
-          FILE_PATH="${RELEASE_VERSION}/input.txt"
+          FILE_PATH="NAAP_Release/${RELEASE_VERSION}/input.txt"
 
           if [ ! -f "$FILE_PATH" ]; then
             echo "File not found: $FILE_PATH"
@@ -202,13 +197,21 @@ jobs:
               echo "Warning: YAML file not found for $SERVICE"
             fi
           done
-
+          
+      - name: Checkout Project Repository
+        uses: actions/checkout@v2
+        with:
+          repository: 'git-ci-123/NAAP_PROJECT'
+          token: ${{ secrets.GITHUB_TOKEN }}    
+          ref: dev-manifest
+          path: 'NAAP_Manifest'
+          
       - name: Apply Kubernetes Manifests
         run: |
           IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
-            YAML_FILE="manifest/${SERVICE}.yaml"  # Update to reflect the new location
+            YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"  # Update to reflect the new location
             if [ -f "$YAML_FILE" ]; then
               kubectl apply -f "$YAML_FILE"
             fi

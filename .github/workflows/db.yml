@@ -52,7 +52,7 @@ jobs:
   DB_Execution:
     needs: checkout
     runs-on: naap
-    if: ${{ env.DB != '' }} 
+    if: ${{ needs.checkout.outputs.DB != '' }}
     steps:
       - name: Check RDS Instance Connection
         run: |

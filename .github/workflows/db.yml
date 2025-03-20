@@ -31,7 +31,7 @@ jobs:
         run: |
           ls -ltr
           RELEASE_VERSION=${{ inputs.release }}
-          FILE_PATH="${RELEASE_VERSION}/input.txt"
+          FILE_PATH="NAAP_Release/${RELEASE_VERSION}/input.txt"
 
           if [ ! -f "$FILE_PATH" ]; then
             echo "File not found: $FILE_PATH"

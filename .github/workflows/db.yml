@@ -181,7 +181,7 @@ jobs:
 
   Application-Deployment:
     needs:
-      - Property_deployment
+      - checkout
     runs-on: naap
     if: |
       (needs.Property_deployment.result == 'success') || (needs.checkout.outputs.imagetag != '')

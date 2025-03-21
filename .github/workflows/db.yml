@@ -184,7 +184,9 @@ jobs:
       - checkout
     runs-on: naap
     if: |
-      (needs.Property_deployment.result == 'success') || (needs.checkout.outputs.imagetag != '')
+      ((needs.Property_deployment.result == 'success') && (needs.checkout.outputs.imagetag != '')) ||
+      ((needs.DB_Execution.result == 'success') && (needs.checkout.outputs.imagetag != '')) ||
+      (needs.checkout.outputs.imagetag != '')
     steps:
 
       - name: Read Inputs from File

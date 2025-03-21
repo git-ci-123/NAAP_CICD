@@ -10,7 +10,7 @@ on:
  
 jobs:
   checkout:
-    runs-on: ubuntu-latest
+    runs-on: naap
     outputs:
       iteration: ${{ steps.extract.outputs.ITERATION }}
       imagetag: ${{ steps.extract.outputs.IMAGETAG }}
@@ -59,7 +59,7 @@ jobs:
  
   DB_Execution:
     needs: checkout
-    runs-on: ubuntu-latest
+    runs-on: naap
     if: ${{ needs.checkout.outputs.db != '' }}
     steps:
       - name: Check RDS Instance Connection
@@ -74,7 +74,7 @@ jobs:
  
   Property_Deployment:
     needs: DB_Execution
-    runs-on: ubuntu-latest
+    runs-on: naap
     if: ${{ needs.checkout.outputs.property == 'true' }}
     steps:
       - name: Process Property File Changes
@@ -84,7 +84,7 @@ jobs:
     needs: 
       - checkout
       - DB_Execution  # Ensure it runs even if Property_Deployment is skipped
-    runs-on: ubuntu-latest
+    runs-on: naap
     if: ${{ needs.checkout.outputs.imagetag != '' }}
     steps:
       - name: Update Kubeconfig

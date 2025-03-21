@@ -91,4 +91,4 @@ jobs:
         run: aws eks update-kubeconfig --name stardust --region us-east-1
  
       - name: Deploy Application
-        run: echo "Deploying application with image tags:" "${{ needs.checkout.outputs.imagetag }}"
+        run: echo "Deploying application with image tags:${{ needs.checkout.outputs.imagetag }}"

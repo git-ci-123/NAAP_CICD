@@ -116,11 +116,10 @@ jobs:
 
         run: |
 
-          sudo apt-get install -y netcat
-
-          if nc -zv qwertyuiop.com 1521; then
-
-            echo "Connection successful!"
+ 
+          sudo apt-get update && sudo apt-get install -y telnet
+           if telnet naapdev.cric42eckumc.us-east-2.rds.amazonaws.com 1521; then
+             echo "Connection successful!"
 
           else
 

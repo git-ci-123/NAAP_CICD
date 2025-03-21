@@ -1,178 +1,323 @@
 name: Cleanslate Execution
  
 on:
+
   workflow_dispatch:
+
     inputs:
+
       release:
+
         description: "Release Path"
+
         required: true
+
         type: string
  
 jobs:
+
   checkout:
-    runs-on: naap
+
+    runs-on: ubuntu-latest
+
     outputs:
+
       iteration: ${{ steps.extract.outputs.ITERATION }}
+
       imagetag: ${{ steps.extract.outputs.IMAGETAG }}
+
       db: ${{ steps.extract.outputs.DB }}
+
       property: ${{ steps.check_properties.outputs.property }}
+
     steps:
+
       - name: Checkout Repository
+
         uses: actions/checkout@v4
  
       - name: Checkout Project Repository
+
         uses: actions/checkout@v4
+
         with:
+
           repository: 'git-ci-123/NAAP_PROJECT'
+
           token: ${{ secrets.GITHUB_TOKEN }}
+
           ref: releasemanagement
+
           path: 'NAAP_Release'
  
       - name: Read Inputs from File
+
         id: extract
+
         run: |
+
           RELEASE_VERSION=${{ inputs.release }}
+
           FILE_PATH="NAAP_Release/${RELEASE_VERSION}/input.txt"
  
           if [ ! -f "$FILE_PATH" ]; then
+
             echo "File not found: $FILE_PATH"
+
             exit 1
+
           fi
  
           ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+
           IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
+
           DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
  
           echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
+
           echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
+
           echo "DB=$DB" >> $GITHUB_OUTPUT
  
       - name: Check for Properties Files
+
         id: check_properties
+
         run: |
+
           PROP_FILES=$(find NAAP_Release/${{ inputs.release }} -type f -name "*.properties" | wc -l)
+
           if [ "$PROP_FILES" -gt 0 ]; then
+
             echo "property=true" >> $GITHUB_OUTPUT
+
           else
+
             echo "property=false" >> $GITHUB_OUTPUT
+
           fi
  
   DB_Execution:
+
     needs: checkout
-    runs-on: naap
+
+    runs-on: ubuntu-latest
+
     if: ${{ needs.checkout.outputs.db != '' }}
+
+    outputs:
+
+      db_completed: success
+
     steps:
+
       - name: Check RDS Instance Connection
+
         run: |
-          if telnet naapdev.cric42eckumc.us-east-2.rds.amazonaws.com 1521; then
+
+          sudo apt-get install -y netcat
+
+          if nc -zv qwertyuiop.com 1521; then
+
             echo "Connection successful!"
+
           else
+
             echo "Connection failed!"
+
             exit 1
+
           fi
  
   Property_Deployment:
-    needs: DB_Execution
-    runs-on: naap
+
+    needs: 
+
+      - checkout
+
+      - DB_Execution
+
+    runs-on: ubuntu-latest
+
     if: ${{ needs.checkout.outputs.property == 'true' }}
+
+    outputs:
+
+      property_completed: success
+
     steps:
+
       - name: Process Property File Changes
+
         run: |
+
           BASE_PATH="NAAP_Release/${{ inputs.release }}"
+
           LOG_FILE="property_changes.log"
+
           echo "Processing property file changes from $BASE_PATH..." > "$LOG_FILE"
  
           find "$BASE_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do
+
             FILE_NAME=$(basename "$RELEASE_FILE")
+
             PROPERTY_FILE="$FILE_NAME"
  
             if [ ! -f "$PROPERTY_FILE" ]; then
+
               cp "$RELEASE_FILE" "$PROPERTY_FILE"
+
             fi
  
             TEMP_FILE="${PROPERTY_FILE}.tmp"
+
             cp "$PROPERTY_FILE" "$TEMP_FILE"
  
             SECTION=""
+
             while IFS= read -r line; do
+
               [[ -z "$line" || "$line" =~ ^# ]] && continue
  
               case "$line" in
+
                 "[ADD]") SECTION="ADD"; continue ;;
+
                 "[UPDATE]") SECTION="UPDATE"; continue ;;
+
                 "[REMOVE]") SECTION="REMOVE"; continue ;;
+
               esac
  
               KEY=$(echo "$line" | cut -d= -f1)
+
               VALUE=$(echo "$line" | cut -d= -f2-)
  
               case "$SECTION" in
+
                 "ADD")
+
                   if grep -q "^$KEY=" "$TEMP_FILE"; then
+
                     echo "::error::[ERROR] Key '$KEY' already exists, ADD failed!" >> "$LOG_FILE"
+
                     exit 1
+
                   fi
+
                   echo "$line" >> "$TEMP_FILE"
+
                   ;;
+
                 "UPDATE")
+
                   if grep -q "^$KEY=" "$TEMP_FILE"; then
+
                     sed -i "s|^$KEY=.*|$KEY=$VALUE|" "$TEMP_FILE"
+
                   else
+
                     echo "::error::[ERROR] Key '$KEY' not found, UPDATE failed!" >> "$LOG_FILE"
+
                     exit 1
+
                   fi
+
                   ;;
+
                 "REMOVE")
+
                   if grep -q "^$KEY=" "$TEMP_FILE"; then
+
                     sed -i "/^$KEY=/d" "$TEMP_FILE"
+
                   else
+
                     echo "::error::[ERROR] Key '$KEY' not found, REMOVE failed!" >> "$LOG_FILE"
+
                     exit 1
+
                   fi
+
                   ;;
+
               esac
+
             done < "$RELEASE_FILE"
  
             mv "$TEMP_FILE" "$PROPERTY_FILE"
+
           done
  
       - name: Display Logs
+
         run: cat property_changes.log
  
   Application_Deployment:
+
     needs:
+
       - checkout
+
       - DB_Execution
+
       - Property_Deployment
-    runs-on: naap
+
+    runs-on: ubuntu-latest
+
     if: ${{ needs.checkout.outputs.imagetag != '' }}
+
     steps:
+
       - name: Update Kubeconfig
+
         run: aws eks update-kubeconfig --name stardust --region us-east-1
  
       - name: Replace Image Tags in Kubernetes Manifests
+
         run: |
+
           IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
  
           for IMAGE in "${IMAGES[@]}"; do
+
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
+
             TAG=$(echo $IMAGE | cut -d'_' -f2)
  
             YAML_FILE="external-repo/manifest/${SERVICE}.yaml"
+
             if [ -f "$YAML_FILE" ]; then
+
               sed -i "s|:{{imagetag}}|:${TAG}|g" "$YAML_FILE"
+
             else
+
               echo "Warning: YAML file not found for $SERVICE"
+
             fi
+
           done
  
       - name: Apply Kubernetes Manifests
+
         run: |
+
           IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
+
           for IMAGE in "${IMAGES[@]}"; do
+
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
+
             YAML_FILE="external-repo/manifest/${SERVICE}.yaml"
+
             if [ -f "$YAML_FILE" ]; then
+
               kubectl apply -f "$YAML_FILE"
+
             fi
+
           done
+
+ 

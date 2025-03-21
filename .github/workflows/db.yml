@@ -85,7 +85,7 @@ jobs:
       - checkout
     runs-on: naap
     if: |
-      (needs.checkout.outputs.property == 'true' || needs.DB_Execution.result == 'success')
+      (needs.DB_Execution.result == 'success')
     steps:
       
       - name: Process Property File Changes

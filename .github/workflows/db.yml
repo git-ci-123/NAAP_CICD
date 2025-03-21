@@ -180,7 +180,8 @@ jobs:
           git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }
 
   Application-Deployment:
-    
+    needs:
+      - Property_deployment
     runs-on: naap
     if: |
       (needs.Property_deployment.result == 'success') || (needs.checkout.outputs.imagetag != '')

@@ -75,7 +75,7 @@ jobs:
   Property_Deployment:
     needs: DB_Execution
     runs-on: naap
-    if: ${{ needs.checkout.outputs.property == 'true' }}
+    if: ${{ always() && needs.checkout.outputs.property == 'true' }}
     steps:
       - name: Process Property File Changes
         run: echo "Processing property files..."
@@ -83,9 +83,9 @@ jobs:
   Application_Deployment:
     needs: 
       - checkout
-      - DB_Execution  # Ensure it runs even if Property_Deployment is skipped
+      - DB_Execution
     runs-on: naap
-    if: ${{ needs.checkout.outputs.imagetag != '' }}
+    if: ${{ always() && needs.checkout.outputs.imagetag != '' }}
     steps:
       - name: Update Kubeconfig
         run: aws eks update-kubeconfig --name stardust --region us-east-1

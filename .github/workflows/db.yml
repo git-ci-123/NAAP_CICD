@@ -86,6 +86,7 @@ jobs:
       - DB_Execution
     runs-on: naap
     if: |
+      (needs.checkout.outputs.property == 'true' && needs.checkout.outputs.DB == '') ||
       (needs.checkout.outputs.property == 'true' && needs.DB_Execution.result == 'success')
     steps:
       

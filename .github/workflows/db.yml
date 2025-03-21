@@ -83,7 +83,6 @@ jobs:
   Property_deployment:
     needs: 
       - checkout
-      - DB_Execution
     runs-on: naap
     if: |
       (needs.checkout.outputs.property == 'true' || needs.DB_Execution.result == 'success')

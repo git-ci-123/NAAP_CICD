@@ -18,7 +18,7 @@ jobs:
 
   checkout:
 
-    runs-on: ubuntu-latest
+    runs-on: naap
 
     outputs:
 
@@ -102,7 +102,7 @@ jobs:
 
     needs: checkout
 
-    runs-on: ubuntu-latest
+    runs-on: naap
 
     if: ${{ needs.checkout.outputs.db != '' }}
 
@@ -138,7 +138,7 @@ jobs:
 
       - DB_Execution
 
-    runs-on: ubuntu-latest
+    runs-on: naap
 
     if: ${{ needs.checkout.outputs.property == 'true' }}
 
@@ -264,7 +264,7 @@ jobs:
 
       - Property_Deployment
 
-    runs-on: ubuntu-latest
+    runs-on: naap
 
     if: ${{ needs.checkout.outputs.imagetag != '' }}
 

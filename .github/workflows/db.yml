@@ -181,66 +181,65 @@ jobs:
           git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }
 
   Application-Deployment:
-
+    needs: 
+      - checkout
+      - DB_Execution
+      - Property_deployment
     runs-on: naap
-      outputs:
-        iteration: ${{ steps.extract.outputs.ITERATION }}
-        imagetag: ${{ steps.extract.outputs.IMAGETAG }}
-        db: ${{ steps.extract.outputs.DB }}
-      steps:
+    if: ${{ needs.checkout.outputs.db != '' }}
+    steps:
 
-        - name: Read Inputs from File
-          id: extract
-          run: |
-            RELEASE_VERSION=${{ inputs.release }}
-            FILE_PATH="release/${RELEASE_VERSION}/input.txt"
+      - name: Read Inputs from File
+        id: extract
+        run: |
+          RELEASE_VERSION=${{ inputs.release }}
+          FILE_PATH="release/${RELEASE_VERSION}/input.txt"
 
-            if [ ! -f "$FILE_PATH" ]; then
-              echo "File not found: $FILE_PATH"
-              exit 1
-            fi
+          if [ ! -f "$FILE_PATH" ]; then
+            echo "File not found: $FILE_PATH"
+            exit 1
+          fi
 
-            ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
-            IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
-            DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
+          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
 
-            echo "ITERATION=$ITERATION"
-            echo "IMAGETAG=$IMAGETAG"
-            echo "DB=$DB"
+          echo "ITERATION=$ITERATION"
+          echo "IMAGETAG=$IMAGETAG"
+          echo "DB=$DB"
 
-            echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
-            echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
-            echo "DB=$DB" >> $GITHUB_OUTPUT
+          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
+          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
+          echo "DB=$DB" >> $GITHUB_OUTPUT
 
       
-        - name: Update Kubeconfig
-          run: aws eks update-kubeconfig --name stardust --region us-east-1
+      - name: Update Kubeconfig
+        run: aws eks update-kubeconfig --name stardust --region us-east-1
 
-        - name: Replace Image Tags in Kubernetes Manifests (No Commit)
-          run: |
-            IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
+      - name: Replace Image Tags in Kubernetes Manifests (No Commit)
+        run: |
+          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
 
-            for IMAGE in "${IMAGES[@]}"; do
-              SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
-              TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
+          for IMAGE in "${IMAGES[@]}"; do
+            SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
+            TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
 
-              YAML_FILE="external-repo/manifest/${SERVICE}.yaml" 
-              if [ -f "$YAML_FILE" ]; then
-                echo "Updating $YAML_FILE with image tag $TAG"
-                sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
-              else
-                echo "Warning: YAML file not found for $SERVICE"
-              fi
-            done
+            YAML_FILE="external-repo/manifest/${SERVICE}.yaml" 
+            if [ -f "$YAML_FILE" ]; then
+              echo "Updating $YAML_FILE with image tag $TAG"
+              sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
+            else
+              echo "Warning: YAML file not found for $SERVICE"
+            fi
+          done
 
-        - name: Apply Kubernetes Manifests
-          run: |
-            IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
-            for IMAGE in "${IMAGES[@]}"; do
-              SERVICE=$(echo $IMAGE | cut -d'_' -f1)
-              YAML_FILE="manifest/${SERVICE}.yaml"  # Update to reflect the new location
-              if [ -f "$YAML_FILE" ]; then
-                kubectl apply -f "$YAML_FILE"
-              fi
-            done
-
+      - name: Apply Kubernetes Manifests
+        run: |
+          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
+          for IMAGE in "${IMAGES[@]}"; do
+            SERVICE=$(echo $IMAGE | cut -d'_' -f1)
+            YAML_FILE="manifest/${SERVICE}.yaml"  # Update to reflect the new location
+            if [ -f "$YAML_FILE" ]; then
+              kubectl apply -f "$YAML_FILE"
+            fi
+          done

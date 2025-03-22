@@ -86,8 +86,42 @@ jobs:
     runs-on: naap
     if: ${{ always() && needs.checkout.outputs.imagetag != '' }}
     steps:
-      - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --name stardust --region us-east-1
+      - name: Checkout Project Repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'git-ci-123/NAAP_PROJECT'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: dev-manifest
+          path: 'NAAP_Manifest'
  
-      - name: Deploy Application
-        run: echo "Deploying application with image tags:${{ needs.checkout.outputs.imagetag }}"
+      - name: Update Kubeconfig
+        run: aws eks update-kubeconfig --name naapdev --region us-east-2
+        
+      - name: Replace Image Tags in Kubernetes Manifests (No Commit)
+        run: |
+          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
+
+          for IMAGE in "${IMAGES[@]}"; do
+            SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
+            TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
+
+            YAML_FILE="manifest/${SERVICE}.yaml"
+
+            if [ -f "$YAML_FILE" ]; then
+              echo "Updating $YAML_FILE with image tag $TAG"
+              sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
+            else
+              echo "Warning: YAML file not found for $SERVICE"
+            fi
+          done
+
+      - name: Apply Kubernetes Manifests
+        run: |
+          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
+          for IMAGE in "${IMAGES[@]}"; do
+            SERVICE=$(echo $IMAGE | cut -d'_' -f1)
+            YAML_FILE="manifest/${SERVICE}.yaml"
+            if [ -f "$YAML_FILE" ]; then
+              kubectl apply -f "$YAML_FILE"
+            fi
+          done

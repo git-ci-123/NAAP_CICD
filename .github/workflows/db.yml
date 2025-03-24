@@ -87,7 +87,7 @@ jobs:
              curl -X POST -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
                   -H "Accept: application/vnd.github.v3+json" \
                    https://api.github.com/repos/git-ci-123/NAAP_CICD/actions/workflows/property-update.yml/dispatches  \
-                  -d '{"event_type": "property_workflow_trigger"}'
+                   -d '{"ref":"dev-cicd"}'
             
  
   Application_Deployment:

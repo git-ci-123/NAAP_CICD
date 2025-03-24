@@ -90,11 +90,12 @@ jobs:
           fi
 
 
-  update_properties:
+  Property_Deployment:
     needs: 
       - checkout
       - DB_Execution
     runs-on: naap
+    if: ${{ always() && needs.checkout.outputs.property == 'true' }}
 
     steps:
       - name: Checkout Target Repository
@@ -220,6 +221,7 @@ jobs:
       - DB_Execution
       - update_properties
     runs-on: naap
+    if: ${{ always() && needs.checkout.outputs.imagetag != '' }}
 
     permissions:
       id-token: write 

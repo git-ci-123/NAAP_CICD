@@ -32,8 +32,7 @@ jobs:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.RELEASE_BRANCH }}
           token: ${{ secrets.PAT_TOKEN }}
-          path: release
-          fetch-depth: 0
+          path: repo
 
       - name: Ensure Latest Files
         run: |

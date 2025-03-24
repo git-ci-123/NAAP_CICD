@@ -7,6 +7,8 @@ on:
         description: "Release Path"
         required: true
         type: string
+permissions:
+  contents: write
 env:
   TARGET_REPO: "git-ci-123/NAAP_PROJECT"  # Change to your actual repo
   PROPERTIES_BRANCH: "dev-properties"   # Branch where property files are stored
@@ -79,15 +81,13 @@ jobs:
     needs: DB_Execution
     runs-on: naap
     if: ${{ always() && needs.checkout.outputs.property == 'true' }}
-    permissions:
-      contents: write
     steps:
       - name: Process Property File Changes
         run: |
-               curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-               -H "Accept: application/vnd.github.v3+json" \
-               https://github.com/git-ci-123/NAAP_CICD/dispatches \
-               -d '{"event_type": "property_workflow_trigger"}'
+             curl -X POST -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  https://api.github.com/repos/git-ci-123/NAAP_CICD/dispatches \
+                  -d '{"event_type": "property_workflow_trigger"}'
  
   Application_Deployment:
     needs: 

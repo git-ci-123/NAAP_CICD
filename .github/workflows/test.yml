@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 env:
-  PROJECT_REPO: "git-ci-123/NAAP-Project"
+  PROJECT_REPO: "git-ci-123/NAAP_PROJECT"
   RELEASER_BRANCH: "releasemanagement"
   DB_SCRIPTS_BRANCH: "dev-scripts"
   PROPERTIES_BRANCH: "dev-properties"

@@ -56,6 +56,10 @@ jobs:
           PROP_FILES=$(find NAAP_Release/${{ inputs.release }} -type f -name "*.properties" | wc -l)
           if [ "$PROP_FILES" -gt 0 ]; then
             echo "property=true" >> $GITHUB_OUTPUT
+            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/git-ci-123/NAAP_CICD/dispatches \
+               -d '{"event_type": "property_workflow_trigger"}'
           else
             echo "property=false" >> $GITHUB_OUTPUT
           fi

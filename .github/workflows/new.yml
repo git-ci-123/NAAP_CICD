@@ -219,7 +219,7 @@ jobs:
     needs: 
       - checkout
       - DB_Execution
-      - update_properties
+      - Property_Deployment
     runs-on: naap
     if: ${{ always() && needs.checkout.outputs.imagetag != '' }}
 

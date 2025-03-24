@@ -51,8 +51,20 @@ jobs:
             echo "::error:: input.txt not found in $FILE_PATH"
             exit 1
           fi
-          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
-          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
+
+          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' "$FILE_PATH" | sed '/^$/d')
+
+          if [[ -z "$IMAGETAG" ]]; then
+            echo "::error:: No ImageTag found in input.txt"
+            exit 1
+          fi
+
+          echo "IMAGETAG<<EOF" >> $GITHUB_ENV
+          echo "$IMAGETAG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          echo "Extracted ImageTag:"
+          echo "$IMAGETAG"
 
       - name: Check if DB Scripts Exist
         id: check_db
@@ -67,7 +79,7 @@ jobs:
       - name: Check if Properties Files Exist
         id: check_properties
         run: |
-          PROP_FILES=$(find release/${{ inputs.BASE_PATH }} -type f -name "*.properties" | wc -l)
+          PROP_FILES=$(find release/${{ inputs.BASE_PATH }} -maxdepth 1 -type f -name "*.properties" | wc -l)
           if [ "$PROP_FILES" -gt 0 ]; then
             echo "PROPERTIES=true" >> $GITHUB_OUTPUT
           else
@@ -92,7 +104,7 @@ jobs:
           FULL_PATH="release/${{ inputs.BASE_PATH }}"
           echo "Processing property file changes from $FULL_PATH..." > "$LOG_FILE"
 
-          find "$FULL_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do
+          find "$FULL_PATH" -maxdepth 1 -type f -name "*.properties" | while read -r RELEASE_FILE; do
             echo "Processing file: $RELEASE_FILE" | tee -a "$LOG_FILE"
             FILE_NAME=$(basename "$RELEASE_FILE")
             PROPERTY_FILE="$FILE_NAME"
@@ -147,28 +159,8 @@ jobs:
             mv "$TEMP_FILE" "$PROPERTY_FILE"
           done
 
-  run_db_scripts:
-    needs: extract_data
-    runs-on: ubuntu-latest
-    if: needs.extract_data.outputs.db_exists == 'true'
-    steps:
-      - name: Checkout Database Scripts
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.PROJECT_REPO }}
-          ref: ${{ env.DB_SCRIPTS_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run Liquibase
-        run: |
-          liquibase --url="jdbc:oracle:thin:@db-server:1521:orcl" \
-                    --username="db_user" \
-                    --password="${{ secrets.DB_PASSWORD }}" \
-                    --changeLogFile="release/${{ inputs.BASE_PATH }}/db-scripts/changelog.xml" \
-                    update
-
   deploy_application:
-    needs: [extract_data, run_db_scripts, process_properties]
+    needs: extract_data
     runs-on: ubuntu-latest
     if: needs.extract_data.outputs.imagetag != ''
     steps:
@@ -181,13 +173,18 @@ jobs:
 
       - name: Update Kubernetes Manifests
         run: |
-          IFS=',' read -r -a IMAGES <<< "${{ needs.extract_data.outputs.imagetag }}"
-          for IMAGE in "${IMAGES[@]}"; do
+          echo "Updating manifests using extracted ImageTag..."
+          echo "$IMAGETAG" | while read IMAGE; do
+            [[ -z "$IMAGE" ]] && continue  # Skip empty lines
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
             TAG=$(echo $IMAGE | cut -d'_' -f2)
             YAML_FILE="manifest/${SERVICE}.yaml"
+            
             if [ -f "$YAML_FILE" ]; then
+              echo "Updating $YAML_FILE with image tag $TAG"
               sed -i "s|{{imagetag}}|$TAG|g" "$YAML_FILE"
+            else
+              echo "::warning:: YAML file not found for service: $SERVICE"
             fi
           done
 

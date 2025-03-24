@@ -66,14 +66,17 @@ jobs:
           ref: ${{ env.PROPERTIES_BRANCH }}
           token: ${{ secrets.PAT_TOKEN }}
 
-      - name: Set up Git
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Checkout Release Management Branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PROJECT_REPO }}
+          ref: ${{ env.RELEASE_BRANCH }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: release
 
       - name: Process Property File Changes
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="release/${{ github.event.inputs.BASE_PATH }}"
           LOG_FILE="property_changes.log"
 
           find "$BASE_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do

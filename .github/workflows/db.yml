@@ -1,4 +1,5 @@
 name: Cleanslate Execution
+ 
 on:
   workflow_dispatch:
     inputs:
@@ -6,15 +7,7 @@ on:
         description: "Release Path"
         required: true
         type: string
-
-permissions:
-  contents: write
-
-env:
-  TARGET_REPO: "git-ci-123/NAAP_PROJECT"  # Change to your actual repo
-  PROPERTIES_BRANCH: "dev-properties"    # Branch where property files are stored
-  RELEASE_BRANCH: "releasemanagement"   # Branch where the release folder is stored
-
+ 
 jobs:
   checkout:
     runs-on: naap
@@ -25,41 +18,51 @@ jobs:
       property: ${{ steps.check_properties.outputs.property }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
       - name: Checkout Project Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
         with:
           repository: 'git-ci-123/NAAP_PROJECT'
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}    
           ref: releasemanagement
           path: 'NAAP_Release'
+ 
       - name: Read Inputs from File
         id: extract
         run: |
+          ls -ltr
           RELEASE_VERSION=${{ inputs.release }}
           FILE_PATH="NAAP_Release/${RELEASE_VERSION}/input.txt"
-          
+ 
           if [ ! -f "$FILE_PATH" ]; then
             echo "File not found: $FILE_PATH"
             exit 1
           fi
-          
+ 
           ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
           IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
           DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
-
+ 
+          echo "ITERATION=$ITERATION"
+          echo "IMAGETAG=$IMAGETAG"
+          echo "DB=$DB"
+ 
           echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
           echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
           echo "DB=$DB" >> $GITHUB_OUTPUT
-      - name: Check for Properties Files
+      - name: Check for properties Files
         id: check_properties
         run: |
           PROP_FILES=$(find NAAP_Release/${{ inputs.release }} -type f -name "*.properties" | wc -l)
+ 
           if [ "$PROP_FILES" -gt 0 ]; then
+            echo "Properties files found: $PROP_FILES"
             echo "property=true" >> $GITHUB_OUTPUT
           else
-            echo "property=false" >> $GITHUB_OUTPUT
-
+            echo "No properties files found"
+            echo "property=" >> $GITHUB_OUTPUT
+          fi
+ 
   DB_Execution:
     needs: checkout
     runs-on: naap
@@ -74,70 +77,47 @@ jobs:
             echo "Connection failed!"
             exit 1
           fi
-
-  Property_Deployment:
-    needs: DB_Execution
+ 
+  Property_deployment:
+    needs: 
+      - checkout
     runs-on: naap
-    if: ${{ always() && needs.checkout.outputs.property == 'true' }}
+    if: |
+      (needs.DB_Execution.result == 'success') || (needs.checkout.outputs.property != '')
     steps:
-      - name: Checkout Target Repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.TARGET_REPO }}
-          ref: ${{ env.PROPERTIES_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}
-  
-      - name: Set up Git
+      - name: Process Property File Changes
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-  
-      - name: Fetch and Checkout Release Folder from Target Repo
-        run: |
-          BASE_PATH="${{ inputs.release }}"
-          RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
-  
-          echo "Fetching release branch: $RELEASE_BRANCH from ${{ env.TARGET_REPO }}"
-          git fetch origin "$RELEASE_BRANCH" || { echo "::error::Branch $RELEASE_BRANCH not found!"; exit 1; }
-  
-          echo "Checking out release folder from branch: $RELEASE_BRANCH"
-          git checkout origin/"$RELEASE_BRANCH" -- "$BASE_PATH" || { echo "::error::Release folder not found in $RELEASE_BRANCH!"; exit 1; }
-  
-          [ -d "$BASE_PATH" ] || { echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"; exit 1; }
-  
-      - name: Process Property File Changes (Auto-Create Missing Files)
-        run: |
-          BASE_PATH="${{ inputs.release }}"
+          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
           LOG_FILE="property_changes.log"
-  
+ 
           echo "Processing property file changes from $BASE_PATH..." > "$LOG_FILE"
-  
+ 
           find "$BASE_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do
             FILE_NAME=$(basename "$RELEASE_FILE")  # Get the file name (e.g., "config.properties")
             PROPERTY_FILE="$FILE_NAME"  # Matching file in the properties branch
-  
+ 
             # If the file does not exist, create a new one
             if [ ! -f "$PROPERTY_FILE" ]; then
               echo "[CREATE] Creating new property file: $PROPERTY_FILE" | tee -a "$LOG_FILE"
               cp "$RELEASE_FILE" "$PROPERTY_FILE"
             fi
-  
+ 
             TEMP_FILE="${PROPERTY_FILE}.tmp"
             cp "$PROPERTY_FILE" "$TEMP_FILE"
-  
+ 
             SECTION=""
             while IFS= read -r line; do
               [[ -z "$line" || "$line" =~ ^# ]] && continue
-  
+ 
               case "$line" in
                 "[ADD]") SECTION="ADD"; continue ;;
                 "[UPDATE]") SECTION="UPDATE"; continue ;;
                 "[REMOVE]") SECTION="REMOVE"; continue ;;
               esac
-  
+ 
               KEY=$(echo "$line" | cut -d= -f1)
               VALUE=$(echo "$line" | cut -d= -f2-)
-  
+ 
               case "$SECTION" in
                 "ADD")
                   if grep -q "^$KEY=" "$TEMP_FILE"; then
@@ -173,19 +153,19 @@ jobs:
                   ;;
               esac
             done < "$RELEASE_FILE"
-  
+ 
             mv "$TEMP_FILE" "$PROPERTY_FILE"
           done
-  
+ 
       - name: Display Logs
         run: cat property_changes.log
-  
+ 
       - name: Remove Release Folder Before Commit
         run: |
-          BASE_PATH="${{ inputs.release }}"
+          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
           [ -d "$BASE_PATH" ] && git rm -rf --cached "$BASE_PATH" || echo "Folder not tracked, skipping removal"
           rm -rf "$BASE_PATH"
-  
+ 
       - name: Commit and Push Changes to Target Repo
         run: |
           git add -u
@@ -193,45 +173,55 @@ jobs:
             echo "No changes detected, skipping commit."
             exit 0
           fi
-          git commit -m "Updated properties from release folder: ${{ inputs.release }}"
+          git commit -m "Updated properties from release folder: ${{ github.event.inputs.BASE_PATH }}"
           git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }
-
-  Application_Deployment:
+ 
+  Application-Deployment:
     needs:
       - checkout
-      - DB_Execution
-      - Property_Deployment
     runs-on: naap
-    if: ${{ always() && needs.checkout.outputs.imagetag != '' }}
-    permissions:
-      id-token: write
-      contents: read
+    if: |
+      ((needs.Property_deployment.result == 'success') && (needs.checkout.outputs.imagetag != '')) ||
+      ((needs.DB_Execution.result == 'success') && (needs.checkout.outputs.imagetag != '')) ||
+      (needs.checkout.outputs.imagetag != '')
     steps:
-      - name: Checkout Project Repository
-        uses: actions/checkout@v4
-        with:
-          repository: 'git-ci-123/NAAP_PROJECT'
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: dev-manifest
-          path: 'NAAP_Manifest'
-      - name: Request OIDC Token
+ 
+      - name: Read Inputs from File
+        id: extract
         run: |
-          echo "Fetching OIDC Token..."
-          curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL"
-      - name: Configure AWS Account
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          role-to-assume: arn:aws:iam::692859914710:role/GitHubActionsEKSRole
-          aws-region: us-east-2
+          RELEASE_VERSION=${{ inputs.release }}
+          FILE_PATH="release/${RELEASE_VERSION}/input.txt"
+ 
+          if [ ! -f "$FILE_PATH" ]; then
+            echo "File not found: $FILE_PATH"
+            exit 1
+          fi
+ 
+          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
+          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+ 
+          echo "ITERATION=$ITERATION"
+          echo "IMAGETAG=$IMAGETAG"
+          echo "DB=$DB"
+ 
+          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
+          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
+          echo "DB=$DB" >> $GITHUB_OUTPUT
+ 
+      
       - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --name naapdev --region us-east-2
+        run: aws eks update-kubeconfig --name stardust --region us-east-1
+ 
       - name: Replace Image Tags in Kubernetes Manifests (No Commit)
         run: |
           IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
+ 
           for IMAGE in "${IMAGES[@]}"; do
-            SERVICE=$(echo $IMAGE | cut -d'_' -f1)
-            TAG=$(echo $IMAGE | cut -d'_' -f2)
-            YAML_FILE="manifest/${SERVICE}.yaml"
+            SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
+            TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
+ 
+            YAML_FILE="external-repo/manifest/${SERVICE}.yaml" 
             if [ -f "$YAML_FILE" ]; then
               echo "Updating $YAML_FILE with image tag $TAG"
               sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
@@ -239,12 +229,13 @@ jobs:
               echo "Warning: YAML file not found for $SERVICE"
             fi
           done
+ 
       - name: Apply Kubernetes Manifests
         run: |
           IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
-            YAML_FILE="manifest/${SERVICE}.yaml"
+            YAML_FILE="manifest/${SERVICE}.yaml"  # Update to reflect the new location
             if [ -f "$YAML_FILE" ]; then
               kubectl apply -f "$YAML_FILE"
             fi

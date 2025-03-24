@@ -91,6 +91,9 @@ jobs:
 
 
   update_properties:
+    needs: 
+      - checkout
+      - DB_Execution
     runs-on: naap
 
     steps:
@@ -212,6 +215,7 @@ jobs:
 
 
   Application-Deployment:
+    needs: checkout
     runs-on: naap
 
     permissions:

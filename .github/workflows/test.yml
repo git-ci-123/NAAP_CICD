@@ -31,22 +31,23 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.RELEASE_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}
-          path: repo
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: repo  # ✅ FIXED: Avoids double "release/release"
+          fetch-depth: 0
 
       - name: Ensure Latest Files
         run: |
-          cd release
+          cd repo
           git pull origin ${{ env.RELEASE_BRANCH }}
 
       - name: Debug Folder Structure
         run: |
           echo "Checking directory structure after checkout:"
-          ls -lR release/ || echo "::error:: Release folder does not exist!"
+          ls -lR repo/release/ || echo "::error:: Release folder does not exist!"
 
       - name: Validate BASE_PATH
         run: |
-          FULL_PATH="${{ inputs.BASE_PATH }}"  # ✅ FIXED
+          FULL_PATH="repo/${{ inputs.BASE_PATH }}"  # ✅ FIXED
           echo "Checking folder: $FULL_PATH"
           
           if [ ! -d "$FULL_PATH" ]; then
@@ -58,7 +59,7 @@ jobs:
       - name: Extract ImageTag from input.txt
         id: extract
         run: |
-          FILE_PATH="${{ inputs.BASE_PATH }}/input.txt"  # ✅ FIXED
+          FILE_PATH="repo/${{ inputs.BASE_PATH }}/input.txt"  # ✅ FIXED
           if [[ ! -f "$FILE_PATH" ]]; then
             echo "::error:: input.txt not found in $FILE_PATH"
             exit 1
@@ -81,7 +82,7 @@ jobs:
       - name: Check if DB Scripts Exist
         id: check_db
         run: |
-          DB_SCRIPTS_PATH="${{ inputs.BASE_PATH }}/db-scripts"  # ✅ FIXED
+          DB_SCRIPTS_PATH="repo/${{ inputs.BASE_PATH }}/db-scripts"  # ✅ FIXED
           if [ -d "$DB_SCRIPTS_PATH" ] && [ "$(ls -A $DB_SCRIPTS_PATH)" ]; then
             echo "DB=true" >> $GITHUB_OUTPUT
           else
@@ -91,7 +92,7 @@ jobs:
       - name: Check if Properties Files Exist
         id: check_properties
         run: |
-          PROP_FILES=$(find "${{ inputs.BASE_PATH }}" -maxdepth 1 -type f -name "*.properties" | wc -l)  # ✅ FIXED
+          PROP_FILES=$(find "repo/${{ inputs.BASE_PATH }}" -maxdepth 1 -type f -name "*.properties" | wc -l)  # ✅ FIXED
           if [ "$PROP_FILES" -gt 0 ]; then
             echo "PROPERTIES=true" >> $GITHUB_OUTPUT
           else
@@ -108,12 +109,12 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.PROPERTIES_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Process Property File Changes
         run: |
           LOG_FILE="property_changes.log"
-          FULL_PATH="${{ inputs.BASE_PATH }}"  # ✅ FIXED
+          FULL_PATH="repo/${{ inputs.BASE_PATH }}"  # ✅ FIXED
           echo "Processing property file changes from $FULL_PATH..." > "$LOG_FILE"
 
           find "$FULL_PATH" -maxdepth 1 -type f -name "*.properties" || { echo "::error:: No properties files found!"; exit 1; }
@@ -128,7 +129,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.MANIFEST_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Kubernetes Manifests
         run: |

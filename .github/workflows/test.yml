@@ -30,9 +30,8 @@ jobs:
 
       - name: Validate BASE_PATH
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
-          if [ ! -d "$BASE_PATH" ]; then
-            echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"
+          if [ ! -d "${{ github.event.inputs.BASE_PATH }}" ]; then
+            echo "::error::[ERROR] Release folder does not exist: ${{ github.event.inputs.BASE_PATH }}"
             exit 1
           fi
 
@@ -72,11 +71,10 @@ jobs:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.RELEASE_BRANCH }}
           token: ${{ secrets.PAT_TOKEN }}
-          path: release
 
       - name: Process Property File Changes
         run: |
-          BASE_PATH="release/${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
           LOG_FILE="property_changes.log"
 
           find "$BASE_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do

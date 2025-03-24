@@ -31,7 +31,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.RELEASER_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Debug Files in Release Folder
         run: |
@@ -79,7 +79,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.PROPERTIES_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Process Property File Changes
         run: |
@@ -151,7 +151,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.DB_SCRIPTS_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Run Liquibase
         run: |
@@ -171,7 +171,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.MANIFEST_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Update Kubernetes Manifests
         run: |

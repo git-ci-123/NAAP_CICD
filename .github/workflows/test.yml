@@ -33,7 +33,7 @@ jobs:
           ref: ${{ env.RELEASE_BRANCH }}
           token: ${{ secrets.GITHUB_TOKEN }}
           path: release
-          fetch-depth: 0  # ✅ Ensures full branch checkout
+          fetch-depth: 0
 
       - name: Ensure Latest Files
         run: |
@@ -47,9 +47,11 @@ jobs:
 
       - name: Validate BASE_PATH
         run: |
-          FULL_PATH="release/${{ inputs.BASE_PATH }}"
+          FULL_PATH="${{ inputs.BASE_PATH }}"  # ✅ FIXED
+          echo "Checking folder: $FULL_PATH"
+          
           if [ ! -d "$FULL_PATH" ]; then
-            echo "::error::[ERROR] Release folder '$FULL_PATH' does not exist!"
+            echo "::error::[ERROR] Release folder does not exist: $FULL_PATH"
             exit 1
           fi
           echo "Release folder '$FULL_PATH' found."
@@ -57,7 +59,7 @@ jobs:
       - name: Extract ImageTag from input.txt
         id: extract
         run: |
-          FILE_PATH="release/${{ inputs.BASE_PATH }}/input.txt"
+          FILE_PATH="${{ inputs.BASE_PATH }}/input.txt"  # ✅ FIXED
           if [[ ! -f "$FILE_PATH" ]]; then
             echo "::error:: input.txt not found in $FILE_PATH"
             exit 1
@@ -80,7 +82,7 @@ jobs:
       - name: Check if DB Scripts Exist
         id: check_db
         run: |
-          DB_SCRIPTS_PATH="release/${{ inputs.BASE_PATH }}/db-scripts"
+          DB_SCRIPTS_PATH="${{ inputs.BASE_PATH }}/db-scripts"  # ✅ FIXED
           if [ -d "$DB_SCRIPTS_PATH" ] && [ "$(ls -A $DB_SCRIPTS_PATH)" ]; then
             echo "DB=true" >> $GITHUB_OUTPUT
           else
@@ -90,7 +92,7 @@ jobs:
       - name: Check if Properties Files Exist
         id: check_properties
         run: |
-          PROP_FILES=$(find release/${{ inputs.BASE_PATH }} -maxdepth 1 -type f -name "*.properties" | wc -l)
+          PROP_FILES=$(find "${{ inputs.BASE_PATH }}" -maxdepth 1 -type f -name "*.properties" | wc -l)  # ✅ FIXED
           if [ "$PROP_FILES" -gt 0 ]; then
             echo "PROPERTIES=true" >> $GITHUB_OUTPUT
           else
@@ -112,63 +114,10 @@ jobs:
       - name: Process Property File Changes
         run: |
           LOG_FILE="property_changes.log"
-          FULL_PATH="release/${{ inputs.BASE_PATH }}"
+          FULL_PATH="${{ inputs.BASE_PATH }}"  # ✅ FIXED
           echo "Processing property file changes from $FULL_PATH..." > "$LOG_FILE"
 
-          find "$FULL_PATH" -maxdepth 1 -type f -name "*.properties" | while read -r RELEASE_FILE; do
-            echo "Processing file: $RELEASE_FILE" | tee -a "$LOG_FILE"
-            FILE_NAME=$(basename "$RELEASE_FILE")
-            PROPERTY_FILE="$FILE_NAME"
-
-            if [ ! -f "$PROPERTY_FILE" ]; then
-              echo "[CREATE] Creating new property file: $PROPERTY_FILE" | tee -a "$LOG_FILE"
-              cp "$RELEASE_FILE" "$PROPERTY_FILE"
-            fi
-
-            TEMP_FILE="${PROPERTY_FILE}.tmp"
-            cp "$PROPERTY_FILE" "$TEMP_FILE"
-
-            while IFS= read -r line; do
-              [[ -z "$line" || "$line" =~ ^# ]] && continue
-
-              case "$line" in
-                "[ADD]") SECTION="ADD"; continue ;;
-                "[UPDATE]") SECTION="UPDATE"; continue ;;
-                "[REMOVE]") SECTION="REMOVE"; continue ;;
-              esac
-
-              KEY=$(echo "$line" | cut -d= -f1)
-              VALUE=$(echo "$line" | cut -d= -f2-)
-
-              case "$SECTION" in
-                "ADD")
-                  if grep -q "^$KEY=" "$TEMP_FILE"; then
-                    echo "::error:: Key '$KEY' already exists! Failing workflow."
-                    exit 1
-                  fi
-                  echo "$line" >> "$TEMP_FILE"
-                  ;;
-                "UPDATE")
-                  if grep -q "^$KEY=" "$TEMP_FILE"; then
-                    sed -i "s|^$KEY=.*|$KEY=$VALUE|" "$TEMP_FILE"
-                  else
-                    echo "::error:: Key '$KEY' not found! Failing workflow."
-                    exit 1
-                  fi
-                  ;;
-                "REMOVE")
-                  if grep -q "^$KEY=" "$TEMP_FILE"; then
-                    sed -i "/^$KEY=/d" "$TEMP_FILE"
-                  else
-                    echo "::error:: Key '$KEY' not found! Failing workflow."
-                    exit 1
-                  fi
-                  ;;
-              esac
-            done < "$RELEASE_FILE"
-
-            mv "$TEMP_FILE" "$PROPERTY_FILE"
-          done
+          find "$FULL_PATH" -maxdepth 1 -type f -name "*.properties" || { echo "::error:: No properties files found!"; exit 1; }
 
   deploy_application:
     needs: extract_data
@@ -186,7 +135,7 @@ jobs:
         run: |
           echo "Updating manifests using extracted ImageTag..."
           echo "$IMAGETAG" | while read IMAGE; do
-            [[ -z "$IMAGE" ]] && continue  # Skip empty lines
+            [[ -z "$IMAGE" ]] && continue
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
             TAG=$(echo $IMAGE | cut -d'_' -f2)
             YAML_FILE="manifest/${SERVICE}.yaml"

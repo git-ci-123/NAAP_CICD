@@ -3,8 +3,8 @@ name: Consolidated Workflow
 on:
   workflow_dispatch:
     inputs:
-      BASE_PATH:
-        description: "Base path for the release folder"
+      release:
+        description: "Release Path"
         required: true
         type: string
 
@@ -14,10 +14,84 @@ env:
   RELEASE_BRANCH: "releasemanagement"     # Branch where the release folder is stored.
   MANIFEST_BRANCH: "dev-manifest"         # Branch where the manifest files are stored.
   SCRIPT_BRANCH: "dev-script"             # Branch where the DB scripts are stored.
+ 
 
+ 
 jobs:
+  checkout:
+    runs-on: naap
+    outputs:
+      iteration: ${{ steps.extract.outputs.ITERATION }}
+      imagetag: ${{ steps.extract.outputs.IMAGETAG }}
+      db: ${{ steps.extract.outputs.DB }}
+      property: ${{ steps.check_properties.outputs.property }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Checkout Project Repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'git-ci-123/NAAP_PROJECT'
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: releasemanagement
+          path: 'NAAP_Release'
+ 
+      - name: Read Inputs from File
+        id: extract
+        run: |
+          ls -ltr
+          RELEASE_VERSION=${{ inputs.release }}
+          FILE_PATH="NAAP_Release/${RELEASE_VERSION}/input.txt"
+ 
+          if [ ! -f "$FILE_PATH" ]; then
+            echo "File not found: $FILE_PATH"
+            exit 1
+          fi
+ 
+          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
+          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+ 
+          echo "ITERATION=$ITERATION"
+          echo "IMAGETAG=$IMAGETAG"
+          echo "DB=$DB"
+ 
+          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
+          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
+          echo "DB=$DB" >> $GITHUB_OUTPUT
+
+      - name: Check for properties Files
+        id: check_properties
+        run: |
+          PROP_FILES=$(find NAAP_Release/${{ inputs.release }} -type f -name "*.properties" | wc -l)
+ 
+          if [ "$PROP_FILES" -gt 0 ]; then
+            echo "Properties files found: $PROP_FILES"
+            echo "property=true" >> $GITHUB_OUTPUT
+          else
+            echo "No properties files found"
+            echo "property=" >> $GITHUB_OUTPUT
+          fi
+ 
+  DB_Execution:
+    needs: checkout
+    runs-on: naap
+    if: ${{ needs.checkout.outputs.db != '' }}
+    steps:
+      - name: Check RDS Instance Connection
+        run: |
+          sudo apt-get update && sudo apt-get install -y telnet
+          if telnet naapdev.cric42eckumc.us-east-2.rds.amazonaws.com 1521; then
+            echo "Connection successful!"
+          else
+            echo "Connection failed!"
+            exit 1
+          fi
+
+
   update_properties:
-    runs-on: ubuntu-latest
+    runs-on: naap
 
     steps:
       - name: Checkout Target Repository
@@ -34,7 +108,7 @@ jobs:
           
       - name: Fetch and Checkout Release Folder from Target Repo
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="${{ github.event.inputs.release }}"
           RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
 
           echo "Fetching release branch: $RELEASE_BRANCH from ${{ env.TARGET_REPO }}"
@@ -47,7 +121,7 @@ jobs:
 
       - name: Process Property File Changes
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="${{ github.event.inputs.release }}"
           LOG_FILE="property_changes.log"
 
           echo "Processing property file changes from $BASE_PATH..." > "$LOG_FILE"
@@ -122,7 +196,7 @@ jobs:
 
       - name: Remove Release Folder Before Commit
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="${{ github.event.inputs.release }}"
           [ -d "$BASE_PATH" ] && git rm -rf --cached "$BASE_PATH" || echo "Folder not tracked, skipping removal"
           rm -rf "$BASE_PATH"
 
@@ -133,7 +207,7 @@ jobs:
             echo "No changes detected, skipping commit."
             exit 0
           fi
-          git commit -m "Updated properties from release folder: ${{ github.event.inputs.BASE_PATH }}"
+          git commit -m "Updated properties from release folder: ${{ github.event.inputs.release }}"
           git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }
 
 
@@ -157,7 +231,7 @@ jobs:
       - name: Read Inputs from File
         id: extract
         run: |
-          RELEASE_VERSION=${{ inputs.BASE_PATH }}
+          RELEASE_VERSION=${{ inputs.release }}
           FILE_PATH="NAAP_Release/${RELEASE_VERSION}/input.txt"
 
           if [ ! -f "$FILE_PATH" ]; then
@@ -177,9 +251,21 @@ jobs:
           echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
           echo "DB=$DB" >> $GITHUB_OUTPUT
 
+      - name: Request OIDC Token
+        run: |
+          echo "Fetching OIDC Token..."
+          curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL"
+
+      - name: Configure AWS Account
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::692859914710:role/GitHubActionsEKSRole
+          aws-region: us-east-2
       
       - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --name stardust --region us-east-1
+        run: aws eks update-kubeconfig --name naapdev --region us-east-1
+
+      
 
       - name: Replace Image Tags in Kubernetes Manifests (No Commit)
         run: |
@@ -198,13 +284,7 @@ jobs:
             fi
           done
           
-      - name: Checkout Project Repository - Manifest Branch
-        uses: actions/checkout@v2
-        with:
-          repository: 'git-ci-123/NAAP_PROJECT'
-          token: ${{ secrets.GITHUB_TOKEN }}    
-          ref: dev-manifest
-          path: 'NAAP_Manifest'
+      
           
       - name: Apply Kubernetes Manifests
         run: |
@@ -216,8 +296,3 @@ jobs:
               kubectl apply -f "$YAML_FILE"
             fi
           done
-
-
-
-
-    

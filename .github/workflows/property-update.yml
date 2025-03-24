@@ -23,25 +23,25 @@ jobs:
 
       - name: Fetch and Checkout Release Folder from Target Repo
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          release="${{ github.event.inputs.release }}"
           RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
 
           echo "Fetching release branch: $RELEASE_BRANCH from ${{ env.TARGET_REPO }}"
           git fetch origin "$RELEASE_BRANCH" || { echo "::error::Branch $RELEASE_BRANCH not found!"; exit 1; }
 
           echo "Checking out release folder from branch: $RELEASE_BRANCH"
-          git checkout origin/"$RELEASE_BRANCH" -- "$BASE_PATH" || { echo "::error::Release folder not found in $RELEASE_BRANCH!"; exit 1; }
+          git checkout origin/"$RELEASE_BRANCH" -- "$release" || { echo "::error::Release folder not found in $RELEASE_BRANCH!"; exit 1; }
 
-          [ -d "$BASE_PATH" ] || { echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"; exit 1; }
+          [ -d "$release" ] || { echo "::error::[ERROR] Release folder does not exist: $release"; exit 1; }
 
       - name: Process Property File Changes (Auto-Create Missing Files)
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          release="${{ github.event.inputs.release }}"
           LOG_FILE="property_changes.log"
 
-          echo "Processing property file changes from $BASE_PATH..." > "$LOG_FILE"
+          echo "Processing property file changes from $release..." > "$LOG_FILE"
 
-          find "$BASE_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do
+          find "$release" -type f -name "*.properties" | while read -r RELEASE_FILE; do
             FILE_NAME=$(basename "$RELEASE_FILE")  # Get the file name (e.g., "config.properties")
             PROPERTY_FILE="$FILE_NAME"  # Matching file in the properties branch
 
@@ -111,9 +111,9 @@ jobs:
 
       - name: Remove Release Folder Before Commit
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
-          [ -d "$BASE_PATH" ] && git rm -rf --cached "$BASE_PATH" || echo "Folder not tracked, skipping removal"
-          rm -rf "$BASE_PATH"
+          release="${{ github.event.inputs.release }}"
+          [ -d "$release" ] && git rm -rf --cached "$release" || echo "Folder not tracked, skipping removal"
+          rm -rf "$release"
 
       - name: Commit and Push Changes to Target Repo
         run: |
@@ -122,5 +122,5 @@ jobs:
             echo "No changes detected, skipping commit."
             exit 0
           fi
-          git commit -m "Updated properties from release folder: ${{ github.event.inputs.BASE_PATH }}"
+          git commit -m "Updated properties from release folder: ${{ github.event.inputs.release }}"
           git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }

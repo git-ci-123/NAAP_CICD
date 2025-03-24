@@ -1,10 +1,10 @@
-name: Cleanslate Execution
+name: Cleanslate Execution - Full Workflow
 
 on:
   workflow_dispatch:
     inputs:
       BASE_PATH:
-        description: "Release Folder Path in releasemanagement"
+        description: "Base path for the release folder in releasemanagement"
         required: true
         type: string
 
@@ -13,9 +13,9 @@ permissions:
 
 env:
   PROJECT_REPO: "git-ci-123/NAAP_PROJECT"
-  RELEASER_BRANCH: "releasemanagement"
-  DB_SCRIPTS_BRANCH: "dev-scripts"
   PROPERTIES_BRANCH: "dev-properties"
+  RELEASE_BRANCH: "releasemanagement"
+  DB_SCRIPTS_BRANCH: "dev-scripts"
   MANIFEST_BRANCH: "dev-manifest"
 
 jobs:
@@ -26,24 +26,29 @@ jobs:
       db_exists: ${{ steps.check_db.outputs.DB }}
       properties_exists: ${{ steps.check_properties.outputs.PROPERTIES }}
     steps:
-      - name: Checkout Release Management
+      - name: Checkout Release Management Branch
         uses: actions/checkout@v4
         with:
           repository: ${{ env.PROJECT_REPO }}
-          ref: ${{ env.RELEASER_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}
+          ref: ${{ env.RELEASE_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: release
 
-      - name: Debug Files in Release Folder
+      - name: Validate BASE_PATH
         run: |
-          echo "Checking files inside ${{ inputs.BASE_PATH }}"
-          ls -lR ${{ inputs.BASE_PATH }} || echo "No files found in ${{ inputs.BASE_PATH }}"
+          FULL_PATH="release/${{ inputs.BASE_PATH }}"
+          if [ ! -d "$FULL_PATH" ]; then
+            echo "::error::[ERROR] Release folder '$FULL_PATH' does not exist!"
+            exit 1
+          fi
+          echo "Release folder '$FULL_PATH' found."
 
       - name: Extract ImageTag from input.txt
         id: extract
         run: |
-          FILE_PATH="${{ inputs.BASE_PATH }}/input.txt"
+          FILE_PATH="release/${{ inputs.BASE_PATH }}/input.txt"
           if [[ ! -f "$FILE_PATH" ]]; then
-            echo "::error:: input.txt not found in $BASE_PATH"
+            echo "::error:: input.txt not found in $FILE_PATH"
             exit 1
           fi
           IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
@@ -52,7 +57,7 @@ jobs:
       - name: Check if DB Scripts Exist
         id: check_db
         run: |
-          DB_SCRIPTS_PATH="${{ inputs.BASE_PATH }}/db-scripts"
+          DB_SCRIPTS_PATH="release/${{ inputs.BASE_PATH }}/db-scripts"
           if [ -d "$DB_SCRIPTS_PATH" ] && [ "$(ls -A $DB_SCRIPTS_PATH)" ]; then
             echo "DB=true" >> $GITHUB_OUTPUT
           else
@@ -62,7 +67,7 @@ jobs:
       - name: Check if Properties Files Exist
         id: check_properties
         run: |
-          PROP_FILES=$(find ${{ inputs.BASE_PATH }} -type f -name "*.properties" | wc -l)
+          PROP_FILES=$(find release/${{ inputs.BASE_PATH }} -type f -name "*.properties" | wc -l)
           if [ "$PROP_FILES" -gt 0 ]; then
             echo "PROPERTIES=true" >> $GITHUB_OUTPUT
           else
@@ -79,14 +84,16 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.PROPERTIES_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Process Property File Changes
         run: |
           LOG_FILE="property_changes.log"
-          echo "Processing property file changes from ${{ inputs.BASE_PATH }}..." > "$LOG_FILE"
+          FULL_PATH="release/${{ inputs.BASE_PATH }}"
+          echo "Processing property file changes from $FULL_PATH..." > "$LOG_FILE"
 
-          find "${{ inputs.BASE_PATH }}" -type f -name "*.properties" | while read -r RELEASE_FILE; do
+          find "$FULL_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do
+            echo "Processing file: $RELEASE_FILE" | tee -a "$LOG_FILE"
             FILE_NAME=$(basename "$RELEASE_FILE")
             PROPERTY_FILE="$FILE_NAME"
 
@@ -98,7 +105,6 @@ jobs:
             TEMP_FILE="${PROPERTY_FILE}.tmp"
             cp "$PROPERTY_FILE" "$TEMP_FILE"
 
-            SECTION=""
             while IFS= read -r line; do
               [[ -z "$line" || "$line" =~ ^# ]] && continue
 
@@ -151,14 +157,14 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.DB_SCRIPTS_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Liquibase
         run: |
           liquibase --url="jdbc:oracle:thin:@db-server:1521:orcl" \
                     --username="db_user" \
                     --password="${{ secrets.DB_PASSWORD }}" \
-                    --changeLogFile="${{ inputs.BASE_PATH }}/db-scripts/changelog.xml" \
+                    --changeLogFile="release/${{ inputs.BASE_PATH }}/db-scripts/changelog.xml" \
                     update
 
   deploy_application:
@@ -171,7 +177,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.MANIFEST_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Kubernetes Manifests
         run: |
@@ -181,7 +187,7 @@ jobs:
             TAG=$(echo $IMAGE | cut -d'_' -f2)
             YAML_FILE="manifest/${SERVICE}.yaml"
             if [ -f "$YAML_FILE" ]; then
-              sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
+              sed -i "s|{{imagetag}}|$TAG|g" "$YAML_FILE"
             fi
           done
 

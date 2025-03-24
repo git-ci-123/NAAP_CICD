@@ -1,17 +1,8 @@
 name: Property Release Automation - External Repo
 
 on:
-  workflow_dispatch:
-    inputs:
-      BASE_PATH:
-        description: "Base path for the release folder"
-        required: true
-        type: string
-
-env:
-  TARGET_REPO: "git-ci-123/NAAP_PROJECT"  # Change to your actual repo
-  PROPERTIES_BRANCH: "dev-properties"   # Branch where property files are stored
-  RELEASE_BRANCH: "releasemanagement" # Branch where the release folder is stored
+  repository_dispatch:
+    types: [property_workflow_trigger]
 
 jobs:
   update_properties:

@@ -212,7 +212,12 @@ jobs:
 
 
   Application-Deployment:
-    runs-on: ubuntu-latest
+    runs-on: naap
+
+    permissions:
+      id-token: write 
+      contents: read
+      
     outputs:
       iteration: ${{ steps.extract.outputs.ITERATION }}
       imagetag: ${{ steps.extract.outputs.IMAGETAG }}

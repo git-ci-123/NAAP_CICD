@@ -1,21 +1,18 @@
-name: Cleanslate Execution - Full Workflow
+name: CI/CD - Update Properties and Deploy App
 
 on:
   workflow_dispatch:
     inputs:
       BASE_PATH:
-        description: "Base path for the release folder in releasemanagement"
+        description: "Base path for the release folder"
         required: true
         type: string
 
-permissions:
-  contents: write
-
 env:
+  TARGET_REPO: "git-ci-123/NAAP_PROJECT"
   PROJECT_REPO: "git-ci-123/NAAP_PROJECT"
   PROPERTIES_BRANCH: "dev-properties"
   RELEASE_BRANCH: "releasemanagement"
-  DB_SCRIPTS_BRANCH: "dev-scripts"
   MANIFEST_BRANCH: "dev-manifest"
 
 jobs:
@@ -23,36 +20,26 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       imagetag: ${{ steps.extract.outputs.IMAGETAG }}
-      db_exists: ${{ steps.check_db.outputs.DB }}
-      properties_exists: ${{ steps.check_properties.outputs.PROPERTIES }}
     steps:
       - name: Checkout Release Management Branch
         uses: actions/checkout@v4
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.RELEASE_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}  # ✅ Use PAT for authentication
-          fetch-depth: 0
-
-      - name: Ensure Latest Files
-        run: |
-          git pull origin ${{ env.RELEASE_BRANCH }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Validate BASE_PATH
         run: |
-          FULL_PATH="${{ inputs.BASE_PATH }}"  # ✅ No "repo/" prefix
-          echo "Checking folder: $FULL_PATH"
-          
-          if [ ! -d "$FULL_PATH" ]; then
-            echo "::error::[ERROR] Release folder does not exist: $FULL_PATH"
+          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          if [ ! -d "$BASE_PATH" ]; then
+            echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"
             exit 1
           fi
-          echo "Release folder '$FULL_PATH' found."
 
       - name: Extract ImageTag from input.txt
         id: extract
         run: |
-          FILE_PATH="${{ inputs.BASE_PATH }}/input.txt"
+          FILE_PATH="${{ github.event.inputs.BASE_PATH }}/input.txt"
           if [[ ! -f "$FILE_PATH" ]]; then
             echo "::error:: input.txt not found in $FILE_PATH"
             exit 1
@@ -66,49 +53,90 @@ jobs:
           fi
 
           echo "IMAGETAG=$IMAGETAG" >> $GITHUB_ENV
-          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT  # ✅ Fix for output handling
+          echo "IMAGETAG=${IMAGETAG}" >> $GITHUB_OUTPUT
 
-          echo "Extracted ImageTag: $IMAGETAG"
-
-      - name: Check if DB Scripts Exist
-        id: check_db
-        run: |
-          DB_SCRIPTS_PATH="${{ inputs.BASE_PATH }}/db-scripts"
-          if [ -d "$DB_SCRIPTS_PATH" ] && [ "$(ls -A $DB_SCRIPTS_PATH 2>/dev/null)" ]; then
-            echo "DB=true" >> $GITHUB_OUTPUT
-          else
-            echo "DB=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Check if Properties Files Exist
-        id: check_properties
-        run: |
-          PROP_FILES=$(find "${{ inputs.BASE_PATH }}" -maxdepth 1 -type f -name "*.properties" | wc -l)
-          if [ "$PROP_FILES" -gt 0 ]; then
-            echo "PROPERTIES=true" >> $GITHUB_OUTPUT
-          else
-            echo "PROPERTIES=false" >> $GITHUB_OUTPUT
-          fi
-
-  process_properties:
+  update_properties:
     needs: extract_data
     runs-on: ubuntu-latest
-    if: needs.extract_data.outputs.properties_exists == 'true'
     steps:
       - name: Checkout Properties Branch
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.PROJECT_REPO }}
+          repository: ${{ env.TARGET_REPO }}
           ref: ${{ env.PROPERTIES_BRANCH }}
           token: ${{ secrets.PAT_TOKEN }}
 
+      - name: Set up Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Process Property File Changes
         run: |
+          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
           LOG_FILE="property_changes.log"
-          FULL_PATH="${{ inputs.BASE_PATH }}"
-          echo "Processing property file changes from $FULL_PATH..." > "$LOG_FILE"
 
-          find "$FULL_PATH" -maxdepth 1 -type f -name "*.properties" || { echo "::error:: No properties files found!"; exit 1; }
+          find "$BASE_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do
+            FILE_NAME=$(basename "$RELEASE_FILE")
+            PROPERTY_FILE="$FILE_NAME"
+
+            if [ ! -f "$PROPERTY_FILE" ]; then
+              cp "$RELEASE_FILE" "$PROPERTY_FILE"
+            fi
+
+            TEMP_FILE="${PROPERTY_FILE}.tmp"
+            cp "$PROPERTY_FILE" "$TEMP_FILE"
+
+            SECTION=""
+            while IFS= read -r line; do
+              [[ -z "$line" || "$line" =~ ^# ]] && continue
+
+              case "$line" in
+                "[ADD]") SECTION="ADD"; continue ;;
+                "[UPDATE]") SECTION="UPDATE"; continue ;;
+                "[REMOVE]") SECTION="REMOVE"; continue ;;
+              esac
+
+              KEY=$(echo "$line" | cut -d= -f1)
+              VALUE=$(echo "$line" | cut -d= -f2-)
+
+              case "$SECTION" in
+                "ADD")
+                  if grep -q "^$KEY=" "$TEMP_FILE"; then
+                    exit 1
+                  fi
+                  echo "$line" >> "$TEMP_FILE"
+                  ;;
+                "UPDATE")
+                  if grep -q "^$KEY=" "$TEMP_FILE"; then
+                    OLD_VALUE=$(grep "^$KEY=" "$TEMP_FILE" | cut -d= -f2-)
+                    sed -i "s|^$KEY=.*|$KEY=$VALUE|" "$TEMP_FILE"
+                  else
+                    exit 1
+                  fi
+                  ;;
+                "REMOVE")
+                  if grep -q "^$KEY=" "$TEMP_FILE"; then
+                    sed -i "/^$KEY=/d" "$TEMP_FILE"
+                  else
+                    exit 1
+                  fi
+                  ;;
+              esac
+            done < "$RELEASE_FILE"
+
+            mv "$TEMP_FILE" "$PROPERTY_FILE"
+          done
+
+      - name: Commit and Push Changes
+        run: |
+          git add -u
+          if git diff --cached --quiet; then
+            echo "No changes detected, skipping commit."
+            exit 0
+          fi
+          git commit -m "Updated properties from release folder"
+          git push origin "${{ env.PROPERTIES_BRANCH }}" || exit 1
 
   deploy_application:
     needs: extract_data
@@ -130,7 +158,7 @@ jobs:
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
             TAG=$(echo $IMAGE | cut -d'_' -f2)
             YAML_FILE="manifest/${SERVICE}.yaml"
-            
+
             if [ -f "$YAML_FILE" ]; then
               echo "Updating $YAML_FILE with image tag $TAG"
               sed -i "s|{{imagetag}}|$TAG|g" "$YAML_FILE"

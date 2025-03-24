@@ -36,7 +36,7 @@ jobs:
 
       - name: Validate BASE_PATH
         run: |
-          FULL_PATH="release/${{ inputs.BASE_PATH }}"
+          FULL_PATH="${{ inputs.BASE_PATH }}"
           if [ ! -d "$FULL_PATH" ]; then
             echo "::error::[ERROR] Release folder '$FULL_PATH' does not exist!"
             exit 1

@@ -1,0 +1,189 @@
+name: Cleanslate Execution
+
+on:
+  workflow_dispatch:
+    inputs:
+      BASE_PATH:
+        description: "Release Folder Path in releasemanagement"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  PROJECT_REPO: "git-ci-123/NAAP-Project"
+  RELEASER_BRANCH: "releasemanagement"
+  DB_SCRIPTS_BRANCH: "dev-scripts"
+  PROPERTIES_BRANCH: "dev-properties"
+  MANIFEST_BRANCH: "dev-manifest"
+
+jobs:
+  extract_data:
+    runs-on: ubuntu-latest
+    outputs:
+      imagetag: ${{ steps.extract.outputs.IMAGETAG }}
+      db_exists: ${{ steps.check_db.outputs.DB }}
+      properties_exists: ${{ steps.check_properties.outputs.PROPERTIES }}
+    steps:
+      - name: Checkout Release Management
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PROJECT_REPO }}
+          ref: ${{ env.RELEASER_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug Files in Release Folder
+        run: |
+          echo "Checking files inside ${{ inputs.BASE_PATH }}"
+          ls -lR ${{ inputs.BASE_PATH }} || echo "No files found in ${{ inputs.BASE_PATH }}"
+
+      - name: Extract ImageTag from input.txt
+        id: extract
+        run: |
+          FILE_PATH="${{ inputs.BASE_PATH }}/input.txt"
+          if [[ ! -f "$FILE_PATH" ]]; then
+            echo "::error:: input.txt not found in $BASE_PATH"
+            exit 1
+          fi
+          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
+          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
+
+      - name: Check if DB Scripts Exist
+        id: check_db
+        run: |
+          DB_SCRIPTS_PATH="${{ inputs.BASE_PATH }}/db-scripts"
+          if [ -d "$DB_SCRIPTS_PATH" ] && [ "$(ls -A $DB_SCRIPTS_PATH)" ]; then
+            echo "DB=true" >> $GITHUB_OUTPUT
+          else
+            echo "DB=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if Properties Files Exist
+        id: check_properties
+        run: |
+          PROP_FILES=$(find ${{ inputs.BASE_PATH }} -type f -name "*.properties" | wc -l)
+          if [ "$PROP_FILES" -gt 0 ]; then
+            echo "PROPERTIES=true" >> $GITHUB_OUTPUT
+          else
+            echo "PROPERTIES=false" >> $GITHUB_OUTPUT
+          fi
+
+  process_properties:
+    needs: extract_data
+    runs-on: ubuntu-latest
+    if: needs.extract_data.outputs.properties_exists == 'true'
+    steps:
+      - name: Checkout Properties Branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PROJECT_REPO }}
+          ref: ${{ env.PROPERTIES_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Process Property File Changes
+        run: |
+          LOG_FILE="property_changes.log"
+          echo "Processing property file changes from ${{ inputs.BASE_PATH }}..." > "$LOG_FILE"
+
+          find "${{ inputs.BASE_PATH }}" -type f -name "*.properties" | while read -r RELEASE_FILE; do
+            FILE_NAME=$(basename "$RELEASE_FILE")
+            PROPERTY_FILE="$FILE_NAME"
+
+            if [ ! -f "$PROPERTY_FILE" ]; then
+              echo "[CREATE] Creating new property file: $PROPERTY_FILE" | tee -a "$LOG_FILE"
+              cp "$RELEASE_FILE" "$PROPERTY_FILE"
+            fi
+
+            TEMP_FILE="${PROPERTY_FILE}.tmp"
+            cp "$PROPERTY_FILE" "$TEMP_FILE"
+
+            SECTION=""
+            while IFS= read -r line; do
+              [[ -z "$line" || "$line" =~ ^# ]] && continue
+
+              case "$line" in
+                "[ADD]") SECTION="ADD"; continue ;;
+                "[UPDATE]") SECTION="UPDATE"; continue ;;
+                "[REMOVE]") SECTION="REMOVE"; continue ;;
+              esac
+
+              KEY=$(echo "$line" | cut -d= -f1)
+              VALUE=$(echo "$line" | cut -d= -f2-)
+
+              case "$SECTION" in
+                "ADD")
+                  if grep -q "^$KEY=" "$TEMP_FILE"; then
+                    echo "::error:: Key '$KEY' already exists! Failing workflow."
+                    exit 1
+                  fi
+                  echo "$line" >> "$TEMP_FILE"
+                  ;;
+                "UPDATE")
+                  if grep -q "^$KEY=" "$TEMP_FILE"; then
+                    sed -i "s|^$KEY=.*|$KEY=$VALUE|" "$TEMP_FILE"
+                  else
+                    echo "::error:: Key '$KEY' not found! Failing workflow."
+                    exit 1
+                  fi
+                  ;;
+                "REMOVE")
+                  if grep -q "^$KEY=" "$TEMP_FILE"; then
+                    sed -i "/^$KEY=/d" "$TEMP_FILE"
+                  else
+                    echo "::error:: Key '$KEY' not found! Failing workflow."
+                    exit 1
+                  fi
+                  ;;
+              esac
+            done < "$RELEASE_FILE"
+
+            mv "$TEMP_FILE" "$PROPERTY_FILE"
+          done
+
+  run_db_scripts:
+    needs: extract_data
+    runs-on: ubuntu-latest
+    if: needs.extract_data.outputs.db_exists == 'true'
+    steps:
+      - name: Checkout Database Scripts
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PROJECT_REPO }}
+          ref: ${{ env.DB_SCRIPTS_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Liquibase
+        run: |
+          liquibase --url="jdbc:oracle:thin:@db-server:1521:orcl" \
+                    --username="db_user" \
+                    --password="${{ secrets.DB_PASSWORD }}" \
+                    --changeLogFile="${{ inputs.BASE_PATH }}/db-scripts/changelog.xml" \
+                    update
+
+  deploy_application:
+    needs: [extract_data, run_db_scripts, process_properties]
+    runs-on: ubuntu-latest
+    if: needs.extract_data.outputs.imagetag != ''
+    steps:
+      - name: Checkout Dev Manifest
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PROJECT_REPO }}
+          ref: ${{ env.MANIFEST_BRANCH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Kubernetes Manifests
+        run: |
+          IFS=',' read -r -a IMAGES <<< "${{ needs.extract_data.outputs.imagetag }}"
+          for IMAGE in "${IMAGES[@]}"; do
+            SERVICE=$(echo $IMAGE | cut -d'_' -f1)
+            TAG=$(echo $IMAGE | cut -d'_' -f2)
+            YAML_FILE="manifest/${SERVICE}.yaml"
+            if [ -f "$YAML_FILE" ]; then
+              sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
+            fi
+          done
+
+      - name: Apply Manifests
+        run: kubectl apply -f manifest/

@@ -215,7 +215,10 @@ jobs:
 
 
   Application-Deployment:
-    needs: checkout
+    needs: 
+      - checkout
+      - DB_Execution
+      - update_properties
     runs-on: naap
 
     permissions:

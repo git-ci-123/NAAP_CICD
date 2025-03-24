@@ -31,23 +31,16 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.RELEASE_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: repo  # ✅ FIXED: Avoids double "release/release"
+          token: ${{ secrets.PAT_TOKEN }}  # ✅ Use PAT for authentication
           fetch-depth: 0
 
       - name: Ensure Latest Files
         run: |
-          cd repo
           git pull origin ${{ env.RELEASE_BRANCH }}
-
-      - name: Debug Folder Structure
-        run: |
-          echo "Checking directory structure after checkout:"
-          ls -lR repo/release/ || echo "::error:: Release folder does not exist!"
 
       - name: Validate BASE_PATH
         run: |
-          FULL_PATH="repo/${{ inputs.BASE_PATH }}"  # ✅ FIXED
+          FULL_PATH="${{ inputs.BASE_PATH }}"  # ✅ No "repo/" prefix
           echo "Checking folder: $FULL_PATH"
           
           if [ ! -d "$FULL_PATH" ]; then
@@ -59,7 +52,7 @@ jobs:
       - name: Extract ImageTag from input.txt
         id: extract
         run: |
-          FILE_PATH="repo/${{ inputs.BASE_PATH }}/input.txt"  # ✅ FIXED
+          FILE_PATH="${{ inputs.BASE_PATH }}/input.txt"
           if [[ ! -f "$FILE_PATH" ]]; then
             echo "::error:: input.txt not found in $FILE_PATH"
             exit 1
@@ -72,18 +65,16 @@ jobs:
             exit 1
           fi
 
-          echo "IMAGETAG<<EOF" >> $GITHUB_ENV
-          echo "$IMAGETAG" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_ENV
+          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT  # ✅ Fix for output handling
 
-          echo "Extracted ImageTag:"
-          echo "$IMAGETAG"
+          echo "Extracted ImageTag: $IMAGETAG"
 
       - name: Check if DB Scripts Exist
         id: check_db
         run: |
-          DB_SCRIPTS_PATH="repo/${{ inputs.BASE_PATH }}/db-scripts"  # ✅ FIXED
-          if [ -d "$DB_SCRIPTS_PATH" ] && [ "$(ls -A $DB_SCRIPTS_PATH)" ]; then
+          DB_SCRIPTS_PATH="${{ inputs.BASE_PATH }}/db-scripts"
+          if [ -d "$DB_SCRIPTS_PATH" ] && [ "$(ls -A $DB_SCRIPTS_PATH 2>/dev/null)" ]; then
             echo "DB=true" >> $GITHUB_OUTPUT
           else
             echo "DB=false" >> $GITHUB_OUTPUT
@@ -92,7 +83,7 @@ jobs:
       - name: Check if Properties Files Exist
         id: check_properties
         run: |
-          PROP_FILES=$(find "repo/${{ inputs.BASE_PATH }}" -maxdepth 1 -type f -name "*.properties" | wc -l)  # ✅ FIXED
+          PROP_FILES=$(find "${{ inputs.BASE_PATH }}" -maxdepth 1 -type f -name "*.properties" | wc -l)
           if [ "$PROP_FILES" -gt 0 ]; then
             echo "PROPERTIES=true" >> $GITHUB_OUTPUT
           else
@@ -109,12 +100,12 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.PROPERTIES_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Process Property File Changes
         run: |
           LOG_FILE="property_changes.log"
-          FULL_PATH="repo/${{ inputs.BASE_PATH }}"  # ✅ FIXED
+          FULL_PATH="${{ inputs.BASE_PATH }}"
           echo "Processing property file changes from $FULL_PATH..." > "$LOG_FILE"
 
           find "$FULL_PATH" -maxdepth 1 -type f -name "*.properties" || { echo "::error:: No properties files found!"; exit 1; }
@@ -129,7 +120,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.MANIFEST_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Update Kubernetes Manifests
         run: |

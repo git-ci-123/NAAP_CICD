@@ -87,7 +87,7 @@ jobs:
     steps:
       - name: Process Property File Changes
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="${{ github.event.inputs.release }}"
           LOG_FILE="property_changes.log"
  
           echo "Processing property file changes from $BASE_PATH..." > "$LOG_FILE"
@@ -162,7 +162,7 @@ jobs:
  
       - name: Remove Release Folder Before Commit
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="${{ github.event.inputs.release }}"
           [ -d "$BASE_PATH" ] && git rm -rf --cached "$BASE_PATH" || echo "Folder not tracked, skipping removal"
           rm -rf "$BASE_PATH"
  
@@ -173,7 +173,7 @@ jobs:
             echo "No changes detected, skipping commit."
             exit 0
           fi
-          git commit -m "Updated properties from release folder: ${{ github.event.inputs.BASE_PATH }}"
+          git commit -m "Updated properties from release folder: ${{ github.event.inputs.release }}"
           git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }
  
   Application-Deployment:

@@ -31,7 +31,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.RELEASE_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
           path: release
           fetch-depth: 0
 
@@ -109,7 +109,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.PROPERTIES_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Process Property File Changes
         run: |
@@ -129,7 +129,7 @@ jobs:
         with:
           repository: ${{ env.PROJECT_REPO }}
           ref: ${{ env.MANIFEST_BRANCH }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Update Kubernetes Manifests
         run: |

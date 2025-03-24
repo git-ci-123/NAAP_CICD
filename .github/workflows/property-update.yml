@@ -9,6 +9,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      - name: Debug Incoming Payload
+        run: echo "Received event=${{ toJson(github.event.client_payload) }}"
+
+      - name: Extract Release Path
+        run: echo "RELEASE_PATH=${{ github.event.client_payload.release }}" >> $GITHUB_ENV
       - name: Checkout Target Repository
         uses: actions/checkout@v4
         with:

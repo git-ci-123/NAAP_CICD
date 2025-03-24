@@ -86,7 +86,7 @@ jobs:
         run: |
                curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                -H "Accept: application/vnd.github.v3+json" \
-               https://api.github.com/repos/git-ci-123/NAAP_CICD/dispatches \
+               https://github.com/git-ci-123/NAAP_CICD/dispatches \
                -d '{"event_type": "property_workflow_trigger"}'
  
   Application_Deployment:

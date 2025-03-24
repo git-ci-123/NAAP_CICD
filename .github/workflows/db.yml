@@ -86,58 +86,58 @@ jobs:
           repository: ${{ env.TARGET_REPO }}
           ref: ${{ env.PROPERTIES_BRANCH }}
           token: ${{ secrets.PAT_TOKEN }}
-
+  
       - name: Set up Git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
+  
       - name: Fetch and Checkout Release Folder from Target Repo
         run: |
           BASE_PATH="${{ inputs.release }}"
           RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
-
+  
           echo "Fetching release branch: $RELEASE_BRANCH from ${{ env.TARGET_REPO }}"
           git fetch origin "$RELEASE_BRANCH" || { echo "::error::Branch $RELEASE_BRANCH not found!"; exit 1; }
-
+  
           echo "Checking out release folder from branch: $RELEASE_BRANCH"
           git checkout origin/"$RELEASE_BRANCH" -- "$BASE_PATH" || { echo "::error::Release folder not found in $RELEASE_BRANCH!"; exit 1; }
-
+  
           [ -d "$BASE_PATH" ] || { echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"; exit 1; }
-
+  
       - name: Process Property File Changes (Auto-Create Missing Files)
         run: |
           BASE_PATH="${{ inputs.release }}"
           LOG_FILE="property_changes.log"
-
+  
           echo "Processing property file changes from $BASE_PATH..." > "$LOG_FILE"
-
+  
           find "$BASE_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do
             FILE_NAME=$(basename "$RELEASE_FILE")  # Get the file name (e.g., "config.properties")
             PROPERTY_FILE="$FILE_NAME"  # Matching file in the properties branch
-
+  
             # If the file does not exist, create a new one
             if [ ! -f "$PROPERTY_FILE" ]; then
               echo "[CREATE] Creating new property file: $PROPERTY_FILE" | tee -a "$LOG_FILE"
               cp "$RELEASE_FILE" "$PROPERTY_FILE"
             fi
-
+  
             TEMP_FILE="${PROPERTY_FILE}.tmp"
             cp "$PROPERTY_FILE" "$TEMP_FILE"
-
+  
             SECTION=""
             while IFS= read -r line; do
               [[ -z "$line" || "$line" =~ ^# ]] && continue
-
+  
               case "$line" in
                 "[ADD]") SECTION="ADD"; continue ;;
                 "[UPDATE]") SECTION="UPDATE"; continue ;;
                 "[REMOVE]") SECTION="REMOVE"; continue ;;
               esac
-
+  
               KEY=$(echo "$line" | cut -d= -f1)
               VALUE=$(echo "$line" | cut -d= -f2-)
-
+  
               case "$SECTION" in
                 "ADD")
                   if grep -q "^$KEY=" "$TEMP_FILE"; then
@@ -173,19 +173,19 @@ jobs:
                   ;;
               esac
             done < "$RELEASE_FILE"
-
+  
             mv "$TEMP_FILE" "$PROPERTY_FILE"
           done
-
+  
       - name: Display Logs
         run: cat property_changes.log
-
+  
       - name: Remove Release Folder Before Commit
         run: |
           BASE_PATH="${{ inputs.release }}"
           [ -d "$BASE_PATH" ] && git rm -rf --cached "$BASE_PATH" || echo "Folder not tracked, skipping removal"
           rm -rf "$BASE_PATH"
-
+  
       - name: Commit and Push Changes to Target Repo
         run: |
           git add -u

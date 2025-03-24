@@ -86,6 +86,11 @@ jobs:
       - Property_Deployment
     runs-on: naap
     if: ${{ always() && needs.checkout.outputs.imagetag != '' }}
+
+    permissions:
+      id-token: write 
+      contents: read
+      
     steps:
       - name: Checkout Project Repository
         uses: actions/checkout@v4

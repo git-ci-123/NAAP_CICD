@@ -33,10 +33,21 @@ jobs:
           ref: ${{ env.RELEASE_BRANCH }}
           token: ${{ secrets.GITHUB_TOKEN }}
           path: release
+          fetch-depth: 0  # ✅ Ensures full branch checkout
+
+      - name: Ensure Latest Files
+        run: |
+          cd release
+          git pull origin ${{ env.RELEASE_BRANCH }}
+
+      - name: Debug Folder Structure
+        run: |
+          echo "Checking directory structure after checkout:"
+          ls -lR release/ || echo "::error:: Release folder does not exist!"
 
       - name: Validate BASE_PATH
         run: |
-          FULL_PATH="${{ inputs.BASE_PATH }}"
+          FULL_PATH="release/${{ inputs.BASE_PATH }}"
           if [ ! -d "$FULL_PATH" ]; then
             echo "::error::[ERROR] Release folder '$FULL_PATH' does not exist!"
             exit 1

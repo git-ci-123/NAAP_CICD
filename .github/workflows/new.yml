@@ -265,7 +265,7 @@ jobs:
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
             TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
 
-            YAML_FILE="NAAP_Manifest/${SERVICE}.yaml" 
+            YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml" 
             if [ -f "$YAML_FILE" ]; then
               echo "Updating $YAML_FILE with image tag $TAG"
               sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"

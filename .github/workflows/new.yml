@@ -288,6 +288,6 @@ jobs:
               echo "$YAML_FILE updated"
               cat $YAML_FILE
               aws eks update-kubeconfig --name naapdev --region us-east-2
-              kubectl apply -f $YAML_FILE --vaildate=false
+              kubectl apply -f $YAML_FILE --validate=false
             fi
           done

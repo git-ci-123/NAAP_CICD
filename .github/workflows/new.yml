@@ -283,7 +283,6 @@ jobs:
 
       - name: Replace Image Tags in Kubernetes Manifests (No Commit)
         run: |
-          echo"${{ needs.checkout.outputs.imagetag }}"
           IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
 
           for IMAGE in "${IMAGES[@]}"; do

@@ -284,5 +284,6 @@ jobs:
             YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"
             if [ -f "$YAML_FILE" ]; then
               echo "$YAML_FILE updated"
+              cat $YAML_FILE
             fi
           done

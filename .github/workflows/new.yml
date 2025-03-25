@@ -287,6 +287,7 @@ jobs:
               kubectl config get-contexts
               echo "$YAML_FILE updated"
               cat $YAML_FILE
+              aws eks update-kubeconfig --name naapdev --region us-east-2
               kubectl apply -f $YAML_FILE
             fi
           done

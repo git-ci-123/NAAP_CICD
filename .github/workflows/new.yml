@@ -245,7 +245,12 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: arn:aws:iam::692859914710:role/GitHubActionsEKSRole
+          role-session-name: GitHubActions
           aws-region: us-east-2
+
+      - name: Verify AWS Role
+        run: |
+          aws sts get-caller-identity
       
       - name: Update Kubeconfig
         run: |

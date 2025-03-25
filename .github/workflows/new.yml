@@ -285,5 +285,6 @@ jobs:
             if [ -f "$YAML_FILE" ]; then
               echo "$YAML_FILE updated"
               cat $YAML_FILE
+              kubectl apply -f $YAML_FILE
             fi
           done

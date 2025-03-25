@@ -220,7 +220,7 @@ jobs:
       - checkout
       - DB_Execution
       - Property_Deployment
-    runs-on: naap
+    runs-on: ubuntu-latest
     if: ${{ always() && needs.checkout.outputs.imagetag != '' }}
 
     permissions:

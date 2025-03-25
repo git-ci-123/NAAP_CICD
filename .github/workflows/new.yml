@@ -283,7 +283,8 @@ jobs:
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
             YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"
             if [ -f "$YAML_FILE" ]; then
-              kubectl version
+              cat ~/.kube/config
+              kubectl config get-contexts
               echo "$YAML_FILE updated"
               cat $YAML_FILE
               kubectl apply -f $YAML_FILE

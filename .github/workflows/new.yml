@@ -281,8 +281,8 @@ jobs:
           IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
-            YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"  # Update to reflect the new location
+            YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"
             if [ -f "$YAML_FILE" ]; then
-              kubectl apply -f "$YAML_FILE"
+              echo "$YAML_FILE updated"
             fi
           done

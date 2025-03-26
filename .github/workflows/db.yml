@@ -47,7 +47,7 @@ jobs:
 
           BASE_PATH="${{ github.event.inputs.base_path }}"
 
-          if [ ! -d "$BASE_PATH" ]; then
+          if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
 
             echo "❌ Error: Base path $BASE_PATH not found!"
 
@@ -55,9 +55,9 @@ jobs:
 
           fi
 
-          echo "BASE_PATH=$BASE_PATH" >> $GITHUB_ENV
+          echo "BASE_PATH=NAAP_Release/$BASE_PATH" >> $GITHUB_ENV
 
-          echo "✅ Base path $BASE_PATH found."
+          echo "✅ Base path NAAP_Release/$BASE_PATH found."
  
       - name: Extract Release Folder from [DB] in input.txt
 

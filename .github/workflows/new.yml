@@ -223,7 +223,7 @@ jobs:
       - DB_Execution
       - Property_Deployment
     runs-on: naap
-    if: ${{needs.checkout.outputs.imagetag == 'true' && success() }}
+    if: ${{always() && needs.checkout.outputs.imagetag == 'true' && success() }}
 
     permissions:
       id-token: write 

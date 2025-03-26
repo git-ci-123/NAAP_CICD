@@ -79,7 +79,7 @@ jobs:
   DB_Execution:
     needs: checkout
     runs-on: naap
-    if: ${{needs.checkout.outputs.db == 'true' }}
+    if: ${{ always() && needs.checkout.outputs.db == 'true' }}
     steps:
       - name: Check RDS Instance Connection
         run: |
@@ -97,7 +97,7 @@ jobs:
       - checkout
       - DB_Execution
     runs-on: naap
-    if: ${{needs.checkout.outputs.property == 'true' }}
+    if: ${{ always() && needs.checkout.outputs.property == 'true' }}
 
     steps:
       - name: Checkout Target Repository
@@ -223,7 +223,7 @@ jobs:
       - DB_Execution
       - Property_Deployment
     runs-on: naap
-    if: ${{needs.checkout.outputs.imagetag == 'true' }}
+    if: ${{needs.checkout.outputs.imagetag != '' }}
 
     permissions:
       id-token: write 

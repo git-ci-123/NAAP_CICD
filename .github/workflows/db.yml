@@ -13,7 +13,14 @@ on:
         required: true
 
         type: string
- 
+
+env:
+  TARGET_REPO: "git-ci-123/NAAP_PROJECT"
+  PROPERTIES_BRANCH: "dev-properties"
+  RELEASE_BRANCH: "releasemanagement"
+  MANIFEST_BRANCH: "dev-manifest"
+  SCRIPT_BRANCH: "dev-script"
+
 jobs:
 
   liquibase-migration:
@@ -25,6 +32,14 @@ jobs:
       - name: Checkout CICD Repository (releasemanagement branch)
 
         uses: actions/checkout@v4
+
+      - name: Checkout Project Repository
+        uses: actions/checkout@v4
+        with:
+          repository:  ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: ${{ env.RELEASE_BRANCH }}
+          path: 'NAAP_Release'
 
         with:
 
@@ -83,14 +98,12 @@ jobs:
           echo "✅ Release folder $RELEASE_FOLDER found."
  
       - name: Checkout DB Scripts (db-scripts branch)
-
         uses: actions/checkout@v4
-
         with:
-
-          ref: db-scripts
-
-          path: db-scripts  
+          repository:  ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: ${{ env.SCRIPT_BRANCH }}
+          path: 'NAAP_DB'
  
       - name: Validate Release Folder in DB Scripts Branch
 
@@ -143,12 +156,16 @@ jobs:
           RELEASE_PATH="db-scripts/dev-scripts/$RELEASE_FOLDER"
 
           echo "🚀 Processing release: $RELEASE_FOLDER"
+ 
+          # Iterate over each schema folder (e.g., 01_APP, 02_BACATA)
 
           find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
 
             SCHEMA_FULL_NAME=$(basename "$schema_folder")
 
-            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2) 
+            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract part after "_"
+ 
+            # Fetch credentials dynamically based on extracted schema name
 
             SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
 
@@ -191,3 +208,5 @@ jobs:
             done
 
           done
+
+ 

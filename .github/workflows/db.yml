@@ -1,242 +1,193 @@
-name: Cleanslate Execution - try
+name: Liquibase Migration
  
 on:
+
   workflow_dispatch:
+
     inputs:
-      release:
-        description: "Release Path"
+
+      base_path:
+
+        description: "Base path in releasemanagement branch (e.g., Release/2305)"
+
         required: true
+
         type: string
  
 jobs:
-  checkout:
-    runs-on: naap
-    outputs:
-      iteration: ${{ steps.extract.outputs.ITERATION }}
-      imagetag: ${{ steps.extract.outputs.IMAGETAG }}
-      db: ${{ steps.extract.outputs.DB }}
-      property: ${{ steps.check_properties.outputs.property }}
+
+  liquibase-migration:
+
+    runs-on: ubuntu-latest
+ 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-      - name: Checkout Project Repository
-        uses: actions/checkout@v2
+
+      - name: Checkout CICD Repository (releasemanagement branch)
+
+        uses: actions/checkout@v4
+
         with:
-          repository: 'git-ci-123/NAAP_PROJECT'
-          token: ${{ secrets.GITHUB_TOKEN }}    
-          ref: releasemanagement
-          path: 'NAAP_Release'
+
+          ref: releasemanagement  
  
-      - name: Read Inputs from File
-        id: extract
+      - name: Validate Base Path in Releasemanagement Branch
+
         run: |
-          ls -ltr
-          RELEASE_VERSION=${{ inputs.release }}
-          FILE_PATH="NAAP_Release/${RELEASE_VERSION}/input.txt"
- 
-          if [ ! -f "$FILE_PATH" ]; then
-            echo "File not found: $FILE_PATH"
+
+          BASE_PATH="${{ github.event.inputs.base_path }}"
+
+          if [ ! -d "$BASE_PATH" ]; then
+
+            echo "❌ Error: Base path $BASE_PATH not found!"
+
             exit 1
+
           fi
+
+          echo "BASE_PATH=$BASE_PATH" >> $GITHUB_ENV
+
+          echo "✅ Base path $BASE_PATH found."
  
-          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
-          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
-          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
- 
-          echo "ITERATION=$ITERATION"
-          echo "IMAGETAG=$IMAGETAG"
-          echo "DB=$DB"
- 
-          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
-          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
-          echo "DB=$DB" >> $GITHUB_OUTPUT
-      - name: Check for properties Files
-        id: check_properties
+      - name: Extract Release Folder from [DB] in input.txt
+
+        id: read_input
+
         run: |
-          PROP_FILES=$(find NAAP_Release/${{ inputs.release }} -type f -name "*.properties" | wc -l)
- 
-          if [ "$PROP_FILES" -gt 0 ]; then
-            echo "Properties files found: $PROP_FILES"
-            echo "property=true" >> $GITHUB_OUTPUT
-          else
-            echo "No properties files found"
-            echo "property=" >> $GITHUB_OUTPUT
-          fi
- 
-  DB_Execution:
-    needs: checkout
-    runs-on: naap
-    if: ${{ needs.checkout.outputs.db != '' }}
-    steps:
-      - name: Check RDS Instance Connection
-        run: |
-          sudo apt-get update && sudo apt-get install -y telnet
-          if telnet naapdev.cric42eckumc.us-east-2.rds.amazonaws.com 1521; then
-            echo "Connection successful!"
-          else
-            echo "Connection failed!"
+
+          RELEASE_FOLDER=$(sed -n '/^\[DB\]/ {n; p;}' "$BASE_PATH/input.txt" | tr -d '\r')
+
+          if [ -z "$RELEASE_FOLDER" ]; then
+
+            echo "❌ Error: Could not extract release folder!"
+
             exit 1
+
           fi
+
+          echo "RELEASE_FOLDER=$RELEASE_FOLDER" >> $GITHUB_ENV
+
+          echo "✅ Extracted release folder: $RELEASE_FOLDER."
  
-  Property_deployment:
-    needs: 
-      - checkout
-    runs-on: naap
-    if: |
-      (needs.DB_Execution.result == 'success') || (needs.checkout.outputs.property != '')
-    steps:
-      - name: Process Property File Changes
+      - name: Validate Release Folder in Releasemanagement Branch
+
         run: |
-          release="${{ github.event.inputs.release }}"
-          LOG_FILE="property_changes.log"
+
+          if [ ! -d "$BASE_PATH/$RELEASE_FOLDER" ]; then
+
+            echo "❌ Error: Release folder $RELEASE_FOLDER not found in $BASE_PATH!"
+
+            exit 1
+
+          fi
+
+          echo "✅ Release folder $RELEASE_FOLDER found."
  
-          echo "Processing property file changes from $release..." > "$LOG_FILE"
+      - name: Checkout DB Scripts (db-scripts branch)
+
+        uses: actions/checkout@v4
+
+        with:
+
+          ref: db-scripts
+
+          path: db-scripts  
  
-          find "$release" -type f -name "*.properties" | while read -r RELEASE_FILE; do
-            FILE_NAME=$(basename "$RELEASE_FILE")  # Get the file name (e.g., "config.properties")
-            PROPERTY_FILE="$FILE_NAME"  # Matching file in the properties branch
+      - name: Validate Release Folder in DB Scripts Branch
+
+        run: |
+
+          DB_SCRIPTS_PATH="db-scripts/dev-scripts/$RELEASE_FOLDER"
+
+          if [ ! -d "$DB_SCRIPTS_PATH" ]; then
+
+            echo "❌ Error: Release folder $RELEASE_FOLDER not found in db-scripts branch!"
+
+            exit 1
+
+          fi
+
+          echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
  
-            # If the file does not exist, create a new one
-            if [ ! -f "$PROPERTY_FILE" ]; then
-              echo "[CREATE] Creating new property file: $PROPERTY_FILE" | tee -a "$LOG_FILE"
-              cp "$RELEASE_FILE" "$PROPERTY_FILE"
+      - name: Set up Java
+
+        uses: actions/setup-java@v3
+
+        with:
+
+          distribution: 'temurin'
+
+          java-version: '17'
+ 
+      - name: Install Liquibase
+
+        run: |
+
+          curl -LO https://github.com/liquibase/liquibase/releases/download/v4.23.2/liquibase-4.23.2.tar.gz
+
+          tar -xvzf liquibase-4.23.2.tar.gz
+
+          chmod +x liquibase
+
+          sudo mv liquibase /usr/local/bin/
+
+          echo "✅ Liquibase installed."
+ 
+      - name: Execute Liquibase Scripts for Multiple Schemas
+
+        env:
+
+          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_URL }}
+
+        run: |
+
+          RELEASE_PATH="db-scripts/dev-scripts/$RELEASE_FOLDER"
+
+          echo "🚀 Processing release: $RELEASE_FOLDER"
+
+          find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
+
+            SCHEMA_FULL_NAME=$(basename "$schema_folder")
+
+            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2) 
+
+            SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
+
+            SCHEMA_PASS_VAR="DB_PASSWORD_${SCHEMA_NAME}"
+ 
+            SCHEMA_USER="${!SCHEMA_USER_VAR}"
+
+            SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
+ 
+            if [ -z "$SCHEMA_USER" ] || [ -z "$SCHEMA_PASS" ]; then
+
+              echo "❌ Error: Missing credentials for schema $SCHEMA_NAME!"
+
+              exit 1
+
             fi
  
-            TEMP_FILE="${PROPERTY_FILE}.tmp"
-            cp "$PROPERTY_FILE" "$TEMP_FILE"
+            echo "📂 Running scripts for schema: $SCHEMA_NAME"
  
-            SECTION=""
-            while IFS= read -r line; do
-              [[ -z "$line" || "$line" =~ ^# ]] && continue
- 
-              case "$line" in
-                "[ADD]") SECTION="ADD"; continue ;;
-                "[UPDATE]") SECTION="UPDATE"; continue ;;
-                "[REMOVE]") SECTION="REMOVE"; continue ;;
-              esac
- 
-              KEY=$(echo "$line" | cut -d= -f1)
-              VALUE=$(echo "$line" | cut -d= -f2-)
- 
-              case "$SECTION" in
-                "ADD")
-                  if grep -q "^$KEY=" "$TEMP_FILE"; then
-                    echo "::error::[ERROR] Key '$KEY' already exists in $PROPERTY_FILE, ADD operation failed!" | tee -a "$LOG_FILE"
-                    exit 1
-                  fi
-                  echo "$line" >> "$TEMP_FILE"
-                  echo "[ADD] $KEY=$VALUE -> Added to $PROPERTY_FILE" | tee -a "$LOG_FILE"
-                  ;;
-                "UPDATE")
-                  if grep -q "^$KEY=" "$TEMP_FILE"; then
-                    OLD_VALUE=$(grep "^$KEY=" "$TEMP_FILE" | cut -d= -f2-)
-                    if [[ "$OLD_VALUE" == "$VALUE" ]]; then
-                      echo "::error::[ERROR] Key '$KEY' already has the same value in $PROPERTY_FILE, UPDATE operation failed!" | tee -a "$LOG_FILE"
-                      exit 1
-                    else
-                      sed -i "s|^$KEY=.*|$KEY=$VALUE|" "$TEMP_FILE"
-                      echo "[UPDATE] $KEY: '$OLD_VALUE' -> '$VALUE' in $PROPERTY_FILE" | tee -a "$LOG_FILE"
-                    fi
-                  else
-                    echo "::error::[ERROR] Key '$KEY' not found in $PROPERTY_FILE, UPDATE operation failed!" | tee -a "$LOG_FILE"
-                    exit 1
-                  fi
-                  ;;
-                "REMOVE")
-                  if grep -q "^$KEY=" "$TEMP_FILE"; then
-                    sed -i "/^$KEY=/d" "$TEMP_FILE"
-                    echo "[REMOVE] $KEY removed from $PROPERTY_FILE" | tee -a "$LOG_FILE"
-                  else
-                    echo "::error::[ERROR] Key '$KEY' not found in $PROPERTY_FILE, REMOVE operation failed!" | tee -a "$LOG_FILE"
-                    exit 1
-                  fi
-                  ;;
-              esac
-            done < "$RELEASE_FILE"
- 
-            mv "$TEMP_FILE" "$PROPERTY_FILE"
-          done
- 
-      - name: Display Logs
-        run: cat property_changes.log
- 
-      - name: Remove Release Folder Before Commit
-        run: |
-          release="${{ github.event.inputs.release }}"
-          [ -d "$release" ] && git rm -rf --cached "$release" || echo "Folder not tracked, skipping removal"
-          rm -rf "$release"
- 
-      - name: Commit and Push Changes to Target Repo
-        run: |
-          git add -u
-          if git diff --cached --quiet; then
-            echo "No changes detected, skipping commit."
-            exit 0
-          fi
-          git commit -m "Updated properties from release folder: ${{ github.event.inputs.release }}"
-          git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }
- 
-  Application-Deployment:
-    needs:
-      - checkout
-    runs-on: naap
-    if: |
-      ((needs.Property_deployment.result == 'success') && (needs.checkout.outputs.imagetag != '')) ||
-      ((needs.DB_Execution.result == 'success') && (needs.checkout.outputs.imagetag != '')) ||
-      (needs.checkout.outputs.imagetag != '')
-    steps:
- 
-      - name: Read Inputs from File
-        id: extract
-        run: |
-          RELEASE_VERSION=${{ inputs.release }}
-          FILE_PATH="release/${RELEASE_VERSION}/input.txt"
- 
-          if [ ! -f "$FILE_PATH" ]; then
-            echo "File not found: $FILE_PATH"
-            exit 1
-          fi
- 
-          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
-          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
-          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
- 
-          echo "ITERATION=$ITERATION"
-          echo "IMAGETAG=$IMAGETAG"
-          echo "DB=$DB"
- 
-          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
-          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
-          echo "DB=$DB" >> $GITHUB_OUTPUT
- 
-      
-      - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --name stardust --region us-east-1
- 
-      - name: Replace Image Tags in Kubernetes Manifests (No Commit)
-        run: |
-          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
- 
-          for IMAGE in "${IMAGES[@]}"; do
-            SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
-            TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
- 
-            YAML_FILE="external-repo/manifest/${SERVICE}.yaml" 
-            if [ -f "$YAML_FILE" ]; then
-              echo "Updating $YAML_FILE with image tag $TAG"
-              sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
-            else
-              echo "Warning: YAML file not found for $SERVICE"
-            fi
-          done
- 
-      - name: Apply Kubernetes Manifests
-        run: |
-          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
-          for IMAGE in "${IMAGES[@]}"; do
-            SERVICE=$(echo $IMAGE | cut -d'_' -f1)
-            YAML_FILE="manifest/${SERVICE}.yaml"  # Update to reflect the new location
-            if [ -f "$YAML_FILE" ]; then
-              kubectl apply -f "$YAML_FILE"
-            fi
+            find "$schema_folder" -type d | sort | while read -r subfolder; do
+
+              echo "📁 Executing in: $subfolder"
+
+              find "$subfolder" -type f -name "*.sql" | sort | while read -r script; do
+
+                echo "📝 Running $script"
+
+                if ! liquibase --url="$LIQUIBASE_COMMAND_URL" --username="$SCHEMA_USER" --password="$SCHEMA_PASS" \
+
+                  --changeLogFile="$script" update; then
+
+                  echo "❌ Error running $script for $SCHEMA_NAME!"
+
+                  exit 1
+
+                fi
+
+              done
+
+            done
+
           done

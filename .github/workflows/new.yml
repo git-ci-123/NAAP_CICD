@@ -266,7 +266,7 @@ jobs:
 
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
-            TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
+            TAG=$(echo $IMAGE)      # Extract tag (v1, v2, etc.)
 
             YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml" 
             if [ -f "$YAML_FILE" ]; then

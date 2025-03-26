@@ -79,7 +79,7 @@ jobs:
   DB_Execution:
     needs: checkout
     runs-on: naap
-    if: ${{ always() && needs.checkout.outputs.db == 'true' }}
+    if: ${{ needs.checkout.outputs.db != '' }}
     steps:
       - name: Check RDS Instance Connection
         run: |
@@ -223,7 +223,7 @@ jobs:
       - DB_Execution
       - Property_Deployment
     runs-on: naap
-    if: ${{ always() && needs.checkout.outputs.imagetag != '' }}
+    if: ${{needs.checkout.outputs.imagetag == 'true' && success() }}
 
     permissions:
       id-token: write 
@@ -297,19 +297,3 @@ jobs:
               kubectl apply -f $YAML_FILE --validate=false
             fi
           done
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

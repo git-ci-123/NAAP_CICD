@@ -97,7 +97,7 @@ jobs:
       - checkout
       - DB_Execution
     runs-on: naap
-    if: ${{ always() && needs.checkout.outputs.property == 'true' }}
+    if: ${{ always() && needs.checkout.outputs.property == 'true' && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped')) }}
 
     steps:
       - name: Checkout Target Repository

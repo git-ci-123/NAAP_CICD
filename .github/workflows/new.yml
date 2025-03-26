@@ -18,21 +18,7 @@ env:
 
  
 jobs:
-  Build-Notify:
-    runs-on: naap
-    steps:
-      - name: Send Email Notification
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: mail.excelacom.in  # Change for Outlook, AWS SES, etc.
-          server_port: 25
-            
-          subject: "Test for  ${{ github.run_id }}"
-          body: |
-            Test
-          to: "padmavathy.s@excelacom.in"
-          from: "GitHub Actions <${{ secrets.EMAIL_USERNAME }}>"
-          content_type: text/html
+  
     
   checkout:
     runs-on: naap
@@ -93,7 +79,7 @@ jobs:
   DB_Execution:
     needs: checkout
     runs-on: naap
-    if: ${{ needs.checkout.outputs.db != '' }}
+    if: ${{ always() && needs.checkout.outputs.db == 'true' }}
     steps:
       - name: Check RDS Instance Connection
         run: |

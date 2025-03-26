@@ -271,7 +271,8 @@ jobs:
             YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml" 
             if [ -f "$YAML_FILE" ]; then
               echo "Updating $YAML_FILE with image tag $TAG"
-              sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
+              echo "sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE""
+              
             else
               echo "Warning: YAML file not found for $SERVICE"
             fi

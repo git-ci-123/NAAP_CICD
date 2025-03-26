@@ -39,11 +39,7 @@ jobs:
           repository:  ${{ env.TARGET_REPO }}
           token: ${{ secrets.PAT_TOKEN }}    
           ref: ${{ env.RELEASE_BRANCH }}
-          path: 'NAAP_Release'
-
-        with:
-
-          ref: releasemanagement  
+          path: 'NAAP_Release' 
  
       - name: Validate Base Path in Releasemanagement Branch
 

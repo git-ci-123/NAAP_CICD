@@ -223,7 +223,7 @@ jobs:
       - DB_Execution
       - Property_Deployment
     runs-on: naap
-    if: ${{ needs.checkout.outputs.imagetag == 'true' && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped') || (needs.Property_Deployment.result == 'success' || needs.Property_Deployment.result == 'skipped')) }}
+    if: ${{ needs.checkout.outputs.imagetag != '' && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped') || (needs.Property_Deployment.result == 'success' || needs.Property_Deployment.result == 'skipped')) }}
 
     permissions:
       id-token: write 

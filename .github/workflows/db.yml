@@ -1,5 +1,5 @@
 name: Liquibase Migration
-
+ 
 on:
   workflow_dispatch:
     inputs:
@@ -19,27 +19,29 @@ jobs:
   liquibase-migration:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout CICD Repository
+      - name: Checkout CICD Repository 
         uses: actions/checkout@v4
 
       - name: Checkout Release Repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.TARGET_REPO }}
-          token: ${{ secrets.PAT_TOKEN }}
+          repository:  ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
           ref: ${{ env.RELEASE_BRANCH }}
-          path: 'NAAP_Release'
-
+          path: 'NAAP_Release' 
+ 
       - name: Validate Base Path in Releasemanagement Branch
         run: |
-          BASE_PATH=$(echo "${{ github.event.inputs.base_path }}" | sed 's/^\/\|\/$//g')
-          if [ ! -d "NAAP_Release/$BASE_PATH" ]; then
+          pwd
+          ls
+          BASE_PATH="${{ github.event.inputs.base_path }}"
+          if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
             echo "❌ Error: Base path $BASE_PATH not found!"
             exit 1
           fi
           echo "BASE_PATH=NAAP_Release/$BASE_PATH" >> $GITHUB_ENV
           echo "✅ Base path NAAP_Release/$BASE_PATH found."
-
+ 
       - name: Extract Release Folder from [DB] in input.txt
         id: read_input
         run: |
@@ -50,15 +52,23 @@ jobs:
           fi
           echo "RELEASE_FOLDER=$RELEASE_FOLDER" >> $GITHUB_ENV
           echo "✅ Extracted release folder: $RELEASE_FOLDER."
-
+ 
+      - name: Validate Release Folder in Releasemanagement Branch
+        run: |
+          if [ ! -d "$BASE_PATH/$RELEASE_FOLDER" ]; then
+            echo "❌ Error: Release folder $RELEASE_FOLDER not found in $BASE_PATH!"
+            exit 1
+          fi
+          echo "✅ Release folder $RELEASE_FOLDER found."
+ 
       - name: Checkout DB Scripts (db-scripts branch)
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.TARGET_REPO }}
-          token: ${{ secrets.PAT_TOKEN }}
+          repository:  ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
           ref: ${{ env.SCRIPT_BRANCH }}
           path: 'NAAP_DB'
-
+ 
       - name: Validate Release Folder in DB Scripts Branch
         run: |
           DB_SCRIPTS_PATH="NAAP_DB/$RELEASE_FOLDER"
@@ -67,44 +77,60 @@ jobs:
             exit 1
           fi
           echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
-
+ 
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
-
+ 
       - name: Install Liquibase
         run: |
           curl -LO https://github.com/liquibase/liquibase/releases/download/v4.23.2/liquibase-4.23.2.tar.gz
           tar -xvzf liquibase-4.23.2.tar.gz
+          chmod +x liquibase
           sudo mv liquibase /usr/local/bin/
           echo "✅ Liquibase installed."
-
+ 
       - name: Execute Liquibase Scripts for Multiple Schemas
         env:
-          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_URL }}
+          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
+          DB_USER_APPCATALOG: ${{ secrets.APPCATALOG_DEV_USER }}
+          DB_PASSWORD_APPCATALOG: ${{ secrets.APPCATALOG_DEV_PASSWD }}
+          DB_USER_BACATALOG: ${{ secrets.BACATALOG_DEV_USER }}
+          DB_PASSWORD_BACATALOG: ${{ secrets.BACATALOG_DEV_PASSWD }}
+          DB_USER_CATALOG: ${{ secrets.CATALOG_DEV_USER }}
+          DB_PASSWORD_CATALOG: ${{ secrets.CATALOG_DEV_PASSWD }}
         run: |
           RELEASE_PATH="NAAP_DB/$RELEASE_FOLDER"
           echo "🚀 Processing release: $RELEASE_FOLDER"
-          
-          # Iterate over each schema folder (e.g., 01_APP, 02_BACATA)
+
+          # Iterate over each schema folder (e.g., 08_APPCATALOG, 09_BACATALOG)
           find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
             SCHEMA_FULL_NAME=$(basename "$schema_folder")
-            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract part after "_"
-            
+            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract schema name after "_"
+
             # Fetch credentials dynamically based on extracted schema name
             SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
             SCHEMA_PASS_VAR="DB_PASSWORD_${SCHEMA_NAME}"
+
+            # Get the value from preloaded env variables
             SCHEMA_USER="${!SCHEMA_USER_VAR}"
             SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
-            
-            if [ -z "$SCHEMA_USER" ] || [ -z "$SCHEMA_PASS" ]; then
-              echo "❌ Error: Missing credentials for schema $SCHEMA_NAME!"
-              exit 1
+
+            # Validate if credentials exist
+            if [ -z "$SCHEMA_USER" ]; then
+              echo "⚠️ Warning: User credential not found for schema $SCHEMA_NAME. Skipping schema..."
+              continue
             fi
-            
-            echo "📂 Running scripts for schema: $SCHEMA_NAME"
+            if [ -z "$SCHEMA_PASS" ]; then
+              echo "⚠️ Warning: Password credential not found for schema $SCHEMA_NAME. Skipping schema..."
+              continue
+            fi
+
+            echo "✅ Found credentials for schema: $SCHEMA_NAME"
+
+            # Iterate through subfolders and apply scripts
             find "$schema_folder" -type d | sort | while read -r subfolder; do
               echo "📁 Executing in: $subfolder"
               find "$subfolder" -type f -name "*.sql" | sort | while read -r script; do

@@ -32,18 +32,20 @@ jobs:
  
       - name: Validate Base Path in Releasemanagement Branch
         run: |
+          pwd
+          ls -ltr
           BASE_PATH="${{ github.event.inputs.base_path }}"
-          if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
+          if [ ! -d "$BASE_PATH" ]; then
             echo "❌ Error: Base path $BASE_PATH not found!"
             exit 1
           fi
-          echo "BASE_PATH=NAAP_Release/$BASE_PATH" >> $GITHUB_ENV
-          echo "✅ Base path NAAP_Release/$BASE_PATH found."
+          echo "BASE_PATH=$BASE_PATH" >> $GITHUB_ENV
+          echo "✅ Base path $BASE_PATH found."
  
       - name: Extract Release Folder from [DB] in input.txt
         id: read_input
         run: |
-          RELEASE_FOLDER=$(sed -n '/^\[DB\]/ {n; p;}' "NAAP_Release/$BASE_PATH/input.txt" | tr -d '\r')
+          RELEASE_FOLDER=$(sed -n '/^\[DB\]/ {n; p;}' "$BASE_PATH/input.txt" | tr -d '\r')
           if [ -z "$RELEASE_FOLDER" ]; then
             echo "❌ Error: Could not extract release folder!"
             exit 1

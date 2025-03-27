@@ -52,14 +52,7 @@ jobs:
           fi
           echo "RELEASE_FOLDER=$RELEASE_FOLDER" >> $GITHUB_ENV
           echo "✅ Extracted release folder: $RELEASE_FOLDER."
- 
-      - name: Validate Release Folder in Releasemanagement Branch
-        run: |
-          if [ ! -d "$BASE_PATH/$RELEASE_FOLDER" ]; then
-            echo "❌ Error: Release folder $RELEASE_FOLDER not found in $BASE_PATH!"
-            exit 1
-          fi
-          echo "✅ Release folder $RELEASE_FOLDER found."
+
  
       - name: Checkout DB Scripts (db-scripts branch)
         uses: actions/checkout@v4

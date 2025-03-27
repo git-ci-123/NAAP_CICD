@@ -1,5 +1,5 @@
 name: Liquibase Migration
- 
+
 on:
   workflow_dispatch:
     inputs:
@@ -19,29 +19,27 @@ jobs:
   liquibase-migration:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout CICD Repository 
+      - name: Checkout CICD Repository
         uses: actions/checkout@v4
 
       - name: Checkout Release Repository
         uses: actions/checkout@v4
         with:
-          repository:  ${{ env.TARGET_REPO }}
-          token: ${{ secrets.PAT_TOKEN }}    
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}
           ref: ${{ env.RELEASE_BRANCH }}
-          path: 'NAAP_Release' 
- 
+          path: 'NAAP_Release'
+
       - name: Validate Base Path in Releasemanagement Branch
         run: |
-          pwd
-          ls
-          BASE_PATH="${{ github.event.inputs.base_path }}"
-          if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
+          BASE_PATH=$(echo "${{ github.event.inputs.base_path }}" | sed 's/^\/\|\/$//g')
+          if [ ! -d "NAAP_Release/$BASE_PATH" ]; then
             echo "❌ Error: Base path $BASE_PATH not found!"
             exit 1
           fi
           echo "BASE_PATH=NAAP_Release/$BASE_PATH" >> $GITHUB_ENV
           echo "✅ Base path NAAP_Release/$BASE_PATH found."
- 
+
       - name: Extract Release Folder from [DB] in input.txt
         id: read_input
         run: |
@@ -52,15 +50,23 @@ jobs:
           fi
           echo "RELEASE_FOLDER=$RELEASE_FOLDER" >> $GITHUB_ENV
           echo "✅ Extracted release folder: $RELEASE_FOLDER."
- 
+
+      - name: Validate Release Folder in Releasemanagement Branch
+        run: |
+          if [ ! -d "$BASE_PATH/$RELEASE_FOLDER" ]; then
+            echo "❌ Error: Release folder $RELEASE_FOLDER not found in $BASE_PATH!"
+            exit 1
+          fi
+          echo "✅ Release folder $RELEASE_FOLDER found."
+
       - name: Checkout DB Scripts (db-scripts branch)
         uses: actions/checkout@v4
         with:
-          repository:  ${{ env.TARGET_REPO }}
-          token: ${{ secrets.PAT_TOKEN }}    
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}
           ref: ${{ env.SCRIPT_BRANCH }}
           path: 'NAAP_DB'
- 
+
       - name: Validate Release Folder in DB Scripts Branch
         run: |
           DB_SCRIPTS_PATH="NAAP_DB/$RELEASE_FOLDER"
@@ -69,50 +75,53 @@ jobs:
             exit 1
           fi
           echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
- 
+
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
- 
+
       - name: Install Liquibase
         run: |
           curl -LO https://github.com/liquibase/liquibase/releases/download/v4.23.2/liquibase-4.23.2.tar.gz
           tar -xvzf liquibase-4.23.2.tar.gz
-          chmod +x liquibase
           sudo mv liquibase /usr/local/bin/
           echo "✅ Liquibase installed."
- 
+
       - name: Execute Liquibase Scripts for Multiple Schemas
         env:
           LIQUIBASE_COMMAND_URL: ${{ secrets.DB_URL }}
         run: |
-          RELEASE_PATH="db-scripts/dev-scripts/$RELEASE_FOLDER"
+          RELEASE_PATH="NAAP_DB/$RELEASE_FOLDER"
           echo "🚀 Processing release: $RELEASE_FOLDER"
+          
           # Iterate over each schema folder (e.g., 01_APP, 02_BACATA)
           find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
             SCHEMA_FULL_NAME=$(basename "$schema_folder")
             SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract part after "_"
+            
             # Fetch credentials dynamically based on extracted schema name
             SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
             SCHEMA_PASS_VAR="DB_PASSWORD_${SCHEMA_NAME}"
             SCHEMA_USER="${!SCHEMA_USER_VAR}"
             SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
+            
             if [ -z "$SCHEMA_USER" ] || [ -z "$SCHEMA_PASS" ]; then
               echo "❌ Error: Missing credentials for schema $SCHEMA_NAME!"
               exit 1
             fi
+            
             echo "📂 Running scripts for schema: $SCHEMA_NAME"
             find "$schema_folder" -type d | sort | while read -r subfolder; do
-              echo "📁 Executing in: $subfolder
+              echo "📁 Executing in: $subfolder"
               find "$subfolder" -type f -name "*.sql" | sort | while read -r script; do
                 echo "📝 Running $script"
-                if ! liquibase --url="$LIQUIBASE_COMMAND_URL" --username="$SCHEMA_USER" --password="$SCHEMA_PASS" 
+                if ! liquibase --url="$LIQUIBASE_COMMAND_URL" --username="$SCHEMA_USER" --password="$SCHEMA_PASS" \
                   --changeLogFile="$script" update; then
                   echo "❌ Error running $script for $SCHEMA_NAME!"
                   exit 1
                 fi
               done
             done
-          done 
+          done

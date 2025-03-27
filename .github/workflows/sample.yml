@@ -1,4 +1,4 @@
-name: Consolidated Workflow
+name: Consolidated Workflow - try
 
 on:
   workflow_dispatch:
@@ -14,9 +14,7 @@ env:
   RELEASE_BRANCH: "releasemanagement"     # Branch where the release folder is stored.
   MANIFEST_BRANCH: "dev-manifest"         # Branch where the manifest files are stored.
   SCRIPT_BRANCH: "dev-script"             # Branch where the DB scripts are stored.
- 
 
- 
 jobs:
   checkout:
     runs-on: naap
@@ -32,11 +30,11 @@ jobs:
       - name: Checkout Project Repository
         uses: actions/checkout@v4
         with:
-          repository: 'git-ci-123/NAAP_PROJECT'
+          repository:  ${{ env.TARGET_REPO }}
           token: ${{ secrets.PAT_TOKEN }}    
-          ref: releasemanagement
+          ref: ${{ env.RELEASE_BRANCH }}
           path: 'NAAP_Release'
- 
+
       - name: Read Inputs from File
         id: extract
         run: |
@@ -72,8 +70,7 @@ jobs:
           else
             echo "No properties files found"
             echo "property=" >> $GITHUB_OUTPUT
-          fi
- 
+
   DB_Execution:
     needs: checkout
     runs-on: naap
@@ -87,12 +84,13 @@ jobs:
           else
             echo "Connection failed!"
             exit 1
-          fi
 
-
-  update_properties:
+  Property_Deployment:
+    needs: 
+      - checkout
+      - DB_Execution
     runs-on: naap
-
+    if: ${{ always() && needs.checkout.outputs.property == 'true' && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped')) }}
     steps:
       - name: Checkout Target Repository
         uses: actions/checkout@v4
@@ -106,27 +104,15 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-      - name: Fetch and Checkout Release Folder from Target Repo
-        run: |
-          BASE_PATH="${{ github.event.inputs.release }}"
-          RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
-
-          echo "Fetching release branch: $RELEASE_BRANCH from ${{ env.TARGET_REPO }}"
-          git fetch origin "$RELEASE_BRANCH" || { echo "::error::Branch $RELEASE_BRANCH not found!"; exit 1; }
-
-          echo "Checking out release folder from branch: $RELEASE_BRANCH"
-          git checkout origin/"$RELEASE_BRANCH" -- "$BASE_PATH" || { echo "::error::Release folder not found in $RELEASE_BRANCH!"; exit 1; }
-
-          [ -d "$BASE_PATH" ] || { echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"; exit 1; }
-
       - name: Process Property File Changes
         run: |
           BASE_PATH="${{ github.event.inputs.release }}"
           LOG_FILE="property_changes.log"
 
           echo "Processing property file changes from $BASE_PATH..." > "$LOG_FILE"
-
+          
           find "$BASE_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do
+            echo "Processing property file: $RELEASE_FILE" | tee -a "$LOG_FILE"
             FILE_NAME=$(basename "$RELEASE_FILE")  # Get the file name (e.g., "config.properties")
             PROPERTY_FILE="$FILE_NAME"  # Matching file in the properties branch
 
@@ -147,6 +133,7 @@ jobs:
                 "[ADD]") SECTION="ADD"; continue ;;
                 "[UPDATE]") SECTION="UPDATE"; continue ;;
                 "[REMOVE]") SECTION="REMOVE"; continue ;;
+
               esac
 
               KEY=$(echo "$line" | cut -d= -f1)
@@ -210,72 +197,57 @@ jobs:
           git commit -m "Updated properties from release folder: ${{ github.event.inputs.release }}"
           git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }
 
-
   Application-Deployment:
-    runs-on: ubuntu-latest
+    needs: 
+      - checkout
+      - DB_Execution
+      - Property_Deployment
+    runs-on: naap
+    if: ${{always() && needs.checkout.outputs.imagetag != ''  && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped') || (needs.Property_Deployment.result == 'success' || needs.Property_Deployment.result == 'skipped')) }}
+    permissions:
+      id-token: write 
+      contents: read
     outputs:
       iteration: ${{ steps.extract.outputs.ITERATION }}
       imagetag: ${{ steps.extract.outputs.IMAGETAG }}
       db: ${{ steps.extract.outputs.DB }}
     steps:
-
       - name: Checkout Project Repository - Release Branch
         uses: actions/checkout@v2
         with:
-          repository: 'git-ci-123/NAAP_PROJECT'
-          token: ${{ secrets.GITHUB_TOKEN }}    
-          ref: releasemanagement
-          path: 'NAAP_Release'
-
-      
-      - name: Read Inputs from File
-        id: extract
-        run: |
-          RELEASE_VERSION=${{ inputs.release }}
-          FILE_PATH="NAAP_Release/${RELEASE_VERSION}/input.txt"
-
-          if [ ! -f "$FILE_PATH" ]; then
-            echo "File not found: $FILE_PATH"
-            exit 1
-          fi
-
-          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
-          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
-          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
-
-          echo "ITERATION=$ITERATION"
-          echo "IMAGETAG=$IMAGETAG"
-          echo "DB=$DB"
-
-          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
-          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
-          echo "DB=$DB" >> $GITHUB_OUTPUT
-
-      - name: Request OIDC Token
-        run: |
-          echo "Fetching OIDC Token..."
-          curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL"
+          repository:  ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: ${{ env.MANIFEST_BRANCH }}
+          path: 'NAAP_Manifest'
 
       - name: Configure AWS Account
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: arn:aws:iam::692859914710:role/GitHubActionsEKSRole
+          role-session-name: GitHubActions
           aws-region: us-east-2
-      
-      - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --name naapdev --region us-east-1
 
-      
+      - name: Verify AWS Role
+        run: |
+          aws sts get-caller-identity
+
+      - name: Update Kubeconfig
+        run: |
+          aws eks update-kubeconfig --name naapdev --region us-east-2
+          kubectl config get-contexts
+          kubectl get nodes
 
       - name: Replace Image Tags in Kubernetes Manifests (No Commit)
         run: |
-          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
+          pwd
+          ls -ltr
+          IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
 
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
-            TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
+            TAG=$(echo $IMAGE)      # Extract tag (v1, v2, etc.)
 
-            YAML_FILE="manifest/${SERVICE}.yaml" 
+            YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml" 
             if [ -f "$YAML_FILE" ]; then
               echo "Updating $YAML_FILE with image tag $TAG"
               sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
@@ -283,16 +255,15 @@ jobs:
               echo "Warning: YAML file not found for $SERVICE"
             fi
           done
-          
-      
-          
+
       - name: Apply Kubernetes Manifests
         run: |
-          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
+          IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
-            YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"  # Update to reflect the new location
+            YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"
             if [ -f "$YAML_FILE" ]; then
-              kubectl apply -f "$YAML_FILE"
+              echo "Applying $YAML_FILE to Kubernetes"
+              kubectl apply -f $YAML_FILE --validate=false
             fi
           done

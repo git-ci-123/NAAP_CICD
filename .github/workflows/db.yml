@@ -17,7 +17,7 @@ env:
 
 jobs:
   liquibase-migration:
-    runs-on: ubuntu-latest
+    runs-on: naap
     steps:
       - name: Checkout CICD Repository 
         uses: actions/checkout@v4
@@ -69,29 +69,6 @@ jobs:
             exit 1
           fi
           echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
- 
-      - name: Set up Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
- 
-      - name: Install Liquibase
-        run: |
-          echo "✅ Downloading Liquibase..."
-          curl -LO https://github.com/liquibase/liquibase/releases/download/v4.23.2/liquibase-4.23.2.tar.gz
-
-          echo "📦 Extracting Liquibase..."
-          tar -xvzf liquibase-4.23.2.tar.gz
-
-          echo "🚀 Moving Liquibase to /usr/local/bin"
-          sudo mkdir -p /usr/local/bin/liquibase
-          sudo mv liquibase /usr/local/bin/liquibase/liquibase
-          sudo mv internal /usr/local/bin/liquibase/internal
-          sudo ln -sf /usr/local/bin/liquibase/liquibase /usr/local/bin/liquibase
-
-          echo "✅ Liquibase installed successfully!"
-
  
       - name: Execute Liquibase Scripts for Multiple Schemas
         env:

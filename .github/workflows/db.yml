@@ -53,14 +53,6 @@ jobs:
           echo "RELEASE_FOLDER=$RELEASE_FOLDER" >> $GITHUB_ENV
           echo "✅ Extracted release folder: $RELEASE_FOLDER."
  
-      - name: Validate Release Folder in Releasemanagement Branch
-        run: |
-          if [ ! -d "$BASE_PATH/$RELEASE_FOLDER" ]; then
-            echo "❌ Error: Release folder $RELEASE_FOLDER not found in $BASE_PATH!"
-            exit 1
-          fi
-          echo "✅ Release folder $RELEASE_FOLDER found."
- 
       - name: Checkout DB Scripts (db-scripts branch)
         uses: actions/checkout@v4
         with:
@@ -68,6 +60,15 @@ jobs:
           token: ${{ secrets.PAT_TOKEN }}    
           ref: ${{ env.SCRIPT_BRANCH }}
           path: 'NAAP_DB'
+ 
+      - name: Validate Release Folder in DB Scripts Branch
+        run: |
+          DB_SCRIPTS_PATH="NAAP_DB/$RELEASE_FOLDER"
+          if [ ! -d "$DB_SCRIPTS_PATH" ]; then
+            echo "❌ Error: Release folder $RELEASE_FOLDER not found in db-scripts branch!"
+            exit 1
+          fi
+          echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
  
       - name: Set up Java
         uses: actions/setup-java@v3

@@ -113,7 +113,7 @@ jobs:
               echo "📁 Executing in: $subfolder"
               find "$subfolder" -type f -name "*.sql" | sort | while read -r script; do
                 echo "📝 Running $script"
-                if ! liquibase --url="$LIQUIBASE_COMMAND_URL" --username="$SCHEMA_USER" --password="$SCHEMA_PASS" update; 
+                if ! liquibase --url="$LIQUIBASE_COMMAND_URL" --username="$SCHEMA_USER" --password="$SCHEMA_PASS" --changeLogFile="$script" update; 
                 then
                   echo "❌ Error running $script for $SCHEMA_NAME!"
                   exit 1

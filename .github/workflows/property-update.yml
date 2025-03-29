@@ -108,13 +108,17 @@ jobs:
 
             echo "✅ Found schema: $SCHEMA_NAME | Changelog: $(basename "$CHANGELOG_FILE")"
 
-            # Run Liquibase Action
-            echo "📂 Running Liquibase for schema $SCHEMA_NAME..."
-            gh workflow run liquibase/liquibase-github-action@v4 \
-              --with operation="update" \
-              --with changelogFile="$CHANGELOG_FILE" \
-              --with url="$LIQUIBASE_COMMAND_URL" \
-              --with username="$SCHEMA_USER" \
-              --with password="$SCHEMA_PASS"
+            # Store values in GitHub Actions environment for the next step
+            echo "SCHEMA_NAME=$SCHEMA_NAME" >> $GITHUB_ENV
+            echo "SCHEMA_USER=$SCHEMA_USER" >> $GITHUB_ENV
+            echo "SCHEMA_PASS=$SCHEMA_PASS" >> $GITHUB_ENV
+            echo "CHANGELOG_FILE=$CHANGELOG_FILE" >> $GITHUB_ENV
 
-          done
+      - name: Execute Liquibase Action
+        uses: liquibase/liquibase-github-action@v4
+        with:
+          operation: "update"
+          changelogFile: ${{ env.CHANGELOG_FILE }}
+          url: ${{ secrets.DB_DEV_URL }}
+          username: ${{ env.SCHEMA_USER }}
+          password: ${{ env.SCHEMA_PASS }}

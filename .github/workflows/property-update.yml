@@ -117,5 +117,5 @@ jobs:
         run: |
           while IFS=":" read -r SCHEMA_NAME SCHEMA_USER SCHEMA_PASS CHANGELOG_FILE; do
             echo "📂 Running Liquibase for schema $SCHEMA_NAME..."
-            liquibase --url="${{ secrets.DB_DEV_URL }}" --username="$SCHEMA_USER" --password="$SCHEMA_PASS" --changeLogFile="$CHANGELOG_FILE" update
+            liquibase --url="${{ secrets.DB_DEV_URL }}" --username="$SCHEMA_USER" --password="$SCHEMA_PASS" --changeLogFile="$CHANGELOG_FILE" update --logLevel=debug
           done < $SCHEMA_INFO

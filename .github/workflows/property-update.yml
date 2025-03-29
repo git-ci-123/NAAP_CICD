@@ -25,21 +25,21 @@ jobs:
       - name: Checkout Release Repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.TARGET_REPO }}
+          repository:  ${{ env.TARGET_REPO }}
           token: ${{ secrets.PAT_TOKEN }}    
           ref: ${{ env.RELEASE_BRANCH }}
           path: 'NAAP_Release' 
-
+ 
       - name: Validate Base Path in Releasemanagement Branch
         run: |
           BASE_PATH="${{ github.event.inputs.base_path }}"
-          if [ ! -d "NAAP_Release/$BASE_PATH" ]; then
+          if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
             echo "❌ Error: Base path $BASE_PATH not found!"
             exit 1
           fi
           echo "BASE_PATH=NAAP_Release/$BASE_PATH" >> $GITHUB_ENV
           echo "✅ Base path NAAP_Release/$BASE_PATH found."
-
+ 
       - name: Extract Release Folder from [DB] in input.txt
         id: read_input
         run: |
@@ -50,15 +50,15 @@ jobs:
           fi
           echo "RELEASE_FOLDER=$RELEASE_FOLDER" >> $GITHUB_ENV
           echo "✅ Extracted release folder: $RELEASE_FOLDER."
-
+ 
       - name: Checkout DB Scripts (db-scripts branch)
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.TARGET_REPO }}
+          repository:  ${{ env.TARGET_REPO }}
           token: ${{ secrets.PAT_TOKEN }}    
           ref: ${{ env.SCRIPT_BRANCH }}
           path: 'NAAP_DB'
-
+ 
       - name: Validate Release Folder in DB Scripts Branch
         run: |
           DB_SCRIPTS_PATH="NAAP_DB/$RELEASE_FOLDER"
@@ -67,51 +67,54 @@ jobs:
             exit 1
           fi
           echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
-
-      - name: Run Liquibase Migration for All Schemas
+ 
+      - name: Run Liquibase Migrations for Available Schemas
         env:
           LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
           DB_USER_APPCATALOG: ${{ secrets.APPCATALOG_DEV_USER }}
           DB_PASSWORD_APPCATALOG: ${{ secrets.APPCATALOG_DEV_PASSWD }}
           DB_USER_BACATALOG: ${{ secrets.BACATALOG_DEV_USER }}
           DB_PASSWORD_BACATALOG: ${{ secrets.BACATALOG_DEV_PASSWD }}
-          DB_USER_ORDERCATALOG: ${{ secrets.ORDERCATALOG_DEV_USER }}
-          DB_PASSWORD_ORDERCATALOG: ${{ secrets.ORDERCATALOG_DEV_PASSWD }}
+          DB_USER_CATALOG: ${{ secrets.CATALOG_DEV_USER }}
+          DB_PASSWORD_CATALOG: ${{ secrets.CATALOG_DEV_PASSWD }}
         run: |
           RELEASE_PATH="NAAP_DB/$RELEASE_FOLDER"
-
           echo "🚀 Processing release: $RELEASE_FOLDER"
 
-          # Iterate over each schema folder dynamically
+          # Iterate over schema folders dynamically
           find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
             SCHEMA_FULL_NAME=$(basename "$schema_folder")
             SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract schema name after "_"
+            CHANGELOG_FILE="$schema_folder/${SCHEMA_NAME}-changelog.xml"
 
-            # Check if a changelog file exists inside the schema folder
-            CHANGELOG_FILE=$(find "$schema_folder" -maxdepth 1 -type f -name "*-changelog.xml" | head -n 1)
-
-            if [ -z "$CHANGELOG_FILE" ]; then
-              echo "⚠️ Warning: No changelog file found for $SCHEMA_NAME. Skipping..."
-              continue
-            fi
-
-            # Fetch credentials dynamically based on schema name
+            # Fetch credentials dynamically based on extracted schema name
             SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
             SCHEMA_PASS_VAR="DB_PASSWORD_${SCHEMA_NAME}"
 
+            # Get the value from preloaded env variables
             SCHEMA_USER="${!SCHEMA_USER_VAR}"
             SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
 
+            # Validate if credentials exist
             if [ -z "$SCHEMA_USER" ] || [ -z "$SCHEMA_PASS" ]; then
-              echo "⚠️ ERROR: Credentials not found for schema $SCHEMA_NAME. Skipping..."
+              echo "❌ Error: Missing credentials for schema $SCHEMA_NAME!"
               exit 1
             fi
 
-            echo "✅ Found schema: $SCHEMA_NAME | Changelog: $(basename "$CHANGELOG_FILE")"
-            echo "📂 Running Liquibase for schema $SCHEMA_NAME..."
+            if [ ! -f "$CHANGELOG_FILE" ]; then
+              echo "⚠️ Warning: Changelog file not found for schema $SCHEMA_NAME. Skipping..."
+              continue
+            fi
 
-            liquibase --url="$LIQUIBASE_COMMAND_URL" \
-                      --username="$SCHEMA_USER" \
-                      --password="$SCHEMA_PASS" \
-                      --changeLogFile="$CHANGELOG_FILE" update
+            echo "✅ Found schema: $SCHEMA_NAME | Changelog: $(basename "$CHANGELOG_FILE")"
+
+            # Run Liquibase Action
+            echo "📂 Running Liquibase for schema $SCHEMA_NAME..."
+            gh workflow run liquibase/liquibase-github-action@v4 \
+              --with operation="update" \
+              --with changelogFile="$CHANGELOG_FILE" \
+              --with url="$LIQUIBASE_COMMAND_URL" \
+              --with username="$SCHEMA_USER" \
+              --with password="$SCHEMA_PASS"
+
           done

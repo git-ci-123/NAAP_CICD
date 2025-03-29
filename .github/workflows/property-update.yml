@@ -1,136 +1,127 @@
-name: Property Release Automation - External Repo
-
+name: Liquibase Migration
+ 
 on:
   workflow_dispatch:
     inputs:
-      BASE_PATH:
-        description: "Base path for the release folder"
+      base_path:
+        description: "Base path in releasemanagement branch (e.g., Release/2305)"
         required: true
         type: string
 
 env:
-  TARGET_REPO: "git-ci-123/NAAP_PROJECT"  # Change to your actual repo
-  PROPERTIES_BRANCH: "dev-properties"   # Branch where property files are stored
-  RELEASE_BRANCH: "releasemanagement" # Branch where the release folder is stored
+  TARGET_REPO: "git-ci-123/NAAP_PROJECT"
+  PROPERTIES_BRANCH: "dev-properties"
+  RELEASE_BRANCH: "releasemanagement"
+  MANIFEST_BRANCH: "dev-manifest"
+  SCRIPT_BRANCH: "dev-script"
 
 jobs:
-  update_properties:
-    runs-on: ubuntu-latest
-
+  liquibase-migration:
+    runs-on: naap
     steps:
-      - name: Checkout Target Repository
+      - name: Checkout CICD Repository 
+        uses: actions/checkout@v4
+
+      - name: Checkout Release Repository
         uses: actions/checkout@v4
         with:
           repository: ${{ env.TARGET_REPO }}
-          ref: ${{ env.PROPERTIES_BRANCH }}
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: ${{ env.RELEASE_BRANCH }}
+          path: 'NAAP_Release' 
 
-      - name: Set up Git
+      - name: Validate Base Path in Releasemanagement Branch
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          BASE_PATH="${{ github.event.inputs.base_path }}"
+          if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
+            echo "❌ Error: Base path $BASE_PATH not found!"
+            exit 1
+          fi
+          echo "BASE_PATH=NAAP_Release/$BASE_PATH" >> $GITHUB_ENV
+          echo "✅ Base path NAAP_Release/$BASE_PATH found."
 
-      - name: Fetch and Checkout Release Folder from Target Repo
+      - name: Extract Release Folder from [DB] in input.txt
+        id: read_input
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
-          RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
+          RELEASE_FOLDER=$(sed -n '/^\[DB\]/ {n; p;}' "$BASE_PATH/input.txt" | tr -d '\r')
+          if [ -z "$RELEASE_FOLDER" ]; then
+            echo "❌ Error: Could not extract release folder!"
+            exit 1
+          fi
+          echo "RELEASE_FOLDER=$RELEASE_FOLDER" >> $GITHUB_ENV
+          echo "✅ Extracted release folder: $RELEASE_FOLDER."
 
-          echo "Fetching release branch: $RELEASE_BRANCH from ${{ env.TARGET_REPO }}"
-          git fetch origin "$RELEASE_BRANCH" || { echo "::error::Branch $RELEASE_BRANCH not found!"; exit 1; }
+      - name: Checkout DB Scripts (db-scripts branch)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: ${{ env.SCRIPT_BRANCH }}
+          path: 'NAAP_DB'
 
-          echo "Checking out release folder from branch: $RELEASE_BRANCH"
-          git checkout origin/"$RELEASE_BRANCH" -- "$BASE_PATH" || { echo "::error::Release folder not found in $RELEASE_BRANCH!"; exit 1; }
-
-          [ -d "$BASE_PATH" ] || { echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"; exit 1; }
-
-      - name: Process Property File Changes (Auto-Create Missing Files)
+      - name: Validate Release Folder in DB Scripts Branch
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
-          LOG_FILE="property_changes.log"
+          DB_SCRIPTS_PATH="NAAP_DB/$RELEASE_FOLDER"
+          if [ ! -d "$DB_SCRIPTS_PATH" ]; then
+            echo "❌ Error: Release folder $RELEASE_FOLDER not found in db-scripts branch!"
+            exit 1
+          fi
+          echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
 
-          echo "Processing property file changes from $BASE_PATH..." > "$LOG_FILE"
+      - name: Execute Liquibase Migration for Multiple Schemas
+        env:
+          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
+          DB_USER_APPCATALOG: ${{ secrets.APPCATALOG_DEV_USER }}
+          DB_PASSWORD_APPCATALOG: ${{ secrets.APPCATALOG_DEV_PASSWD }}
+          DB_USER_BACATALOG: ${{ secrets.BACATALOG_DEV_USER }}
+          DB_PASSWORD_BACATALOG: ${{ secrets.BACATALOG_DEV_PASSWD }}
+          DB_USER_CATALOG: ${{ secrets.CATALOG_DEV_USER }}
+          DB_PASSWORD_CATALOG: ${{ secrets.CATALOG_DEV_PASSWD }}
+        run: |
+          RELEASE_PATH="NAAP_DB/$RELEASE_FOLDER"
+          echo "🚀 Processing release: $RELEASE_FOLDER"
 
-          find "$BASE_PATH" -type f -name "*.properties" | while read -r RELEASE_FILE; do
-            FILE_NAME=$(basename "$RELEASE_FILE")  # Get the file name (e.g., "config.properties")
-            PROPERTY_FILE="$FILE_NAME"  # Matching file in the properties branch
+          # Iterate over each schema folder
+          find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
+            SCHEMA_FULL_NAME=$(basename "$schema_folder")
+            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract schema name after "_"
 
-            # If the file does not exist, create a new one
-            if [ ! -f "$PROPERTY_FILE" ]; then
-              echo "[CREATE] Creating new property file: $PROPERTY_FILE" | tee -a "$LOG_FILE"
-              cp "$RELEASE_FILE" "$PROPERTY_FILE"
+            # Fetch credentials dynamically based on extracted schema name
+            SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
+            SCHEMA_PASS_VAR="DB_PASSWORD_${SCHEMA_NAME}"
+
+            # Get the value from preloaded env variables
+            SCHEMA_USER="${!SCHEMA_USER_VAR}"
+            SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
+
+            # Validate if credentials exist
+            if [ -z "$SCHEMA_USER" ]; then
+              echo "⚠️ Warning: User credential not found for schema $SCHEMA_NAME. Skipping schema..."
+              continue
+            fi
+            if [ -z "$SCHEMA_PASS" ]; then
+              echo "⚠️ Warning: Password credential not found for schema $SCHEMA_NAME. Skipping schema..."
+              continue
             fi
 
-            TEMP_FILE="${PROPERTY_FILE}.tmp"
-            cp "$PROPERTY_FILE" "$TEMP_FILE"
+            echo "✅ Found credentials for schema: $SCHEMA_NAME"
 
-            SECTION=""
-            while IFS= read -r line; do
-              [[ -z "$line" || "$line" =~ ^# ]] && continue
+            # Define expected changelog file format (e.g., APPCATALOG-changelog.xml)
+            CHANGELOG_FILE="${schema_folder}/${SCHEMA_NAME}-changelog.xml"
 
-              case "$line" in
-                "[ADD]") SECTION="ADD"; continue ;;
-                "[UPDATE]") SECTION="UPDATE"; continue ;;
-                "[REMOVE]") SECTION="REMOVE"; continue ;;
-              esac
+            if [ -f "$CHANGELOG_FILE" ]; then
+              echo "📝 Running Liquibase with $CHANGELOG_FILE"
 
-              KEY=$(echo "$line" | cut -d= -f1)
-              VALUE=$(echo "$line" | cut -d= -f2-)
-
-              case "$SECTION" in
-                "ADD")
-                  if grep -q "^$KEY=" "$TEMP_FILE"; then
-                    echo "::error::[ERROR] Key '$KEY' already exists in $PROPERTY_FILE, ADD operation failed!" | tee -a "$LOG_FILE"
-                    exit 1
-                  fi
-                  echo "$line" >> "$TEMP_FILE"
-                  echo "[ADD] $KEY=$VALUE -> Added to $PROPERTY_FILE" | tee -a "$LOG_FILE"
-                  ;;
-                "UPDATE")
-                  if grep -q "^$KEY=" "$TEMP_FILE"; then
-                    OLD_VALUE=$(grep "^$KEY=" "$TEMP_FILE" | cut -d= -f2-)
-                    if [[ "$OLD_VALUE" == "$VALUE" ]]; then
-                      echo "::error::[ERROR] Key '$KEY' already has the same value in $PROPERTY_FILE, UPDATE operation failed!" | tee -a "$LOG_FILE"
-                      exit 1
-                    else
-                      sed -i "s|^$KEY=.*|$KEY=$VALUE|" "$TEMP_FILE"
-                      echo "[UPDATE] $KEY: '$OLD_VALUE' -> '$VALUE' in $PROPERTY_FILE" | tee -a "$LOG_FILE"
-                    fi
-                  else
-                    echo "::error::[ERROR] Key '$KEY' not found in $PROPERTY_FILE, UPDATE operation failed!" | tee -a "$LOG_FILE"
-                    exit 1
-                  fi
-                  ;;
-                "REMOVE")
-                  if grep -q "^$KEY=" "$TEMP_FILE"; then
-                    sed -i "/^$KEY=/d" "$TEMP_FILE"
-                    echo "[REMOVE] $KEY removed from $PROPERTY_FILE" | tee -a "$LOG_FILE"
-                  else
-                    echo "::error::[ERROR] Key '$KEY' not found in $PROPERTY_FILE, REMOVE operation failed!" | tee -a "$LOG_FILE"
-                    exit 1
-                  fi
-                  ;;
-              esac
-            done < "$RELEASE_FILE"
-
-            mv "$TEMP_FILE" "$PROPERTY_FILE"
+              # Use Liquibase GitHub Action
+              liquibase/liquibase-github-action@v4:
+                with:
+                  operation: "update"
+                  classpath: "$schema_folder"
+                  changeLogFile: "$CHANGELOG_FILE"
+                  url: "$LIQUIBASE_COMMAND_URL"
+                  username: "$SCHEMA_USER"
+                  password: "$SCHEMA_PASS"
+            else
+              echo "⚠️ Warning: Changelog file $CHANGELOG_FILE not found. Skipping schema..."
+            fi
           done
-
-      - name: Display Logs
-        run: cat property_changes.log
-
-      - name: Remove Release Folder Before Commit
-        run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
-          [ -d "$BASE_PATH" ] && git rm -rf --cached "$BASE_PATH" || echo "Folder not tracked, skipping removal"
-          rm -rf "$BASE_PATH"
-
-      - name: Commit and Push Changes to Target Repo
-        run: |
-          git add -u
-          if git diff --cached --quiet; then
-            echo "No changes detected, skipping commit."
-            exit 0
-          fi
-          git commit -m "Updated properties from release folder: ${{ github.event.inputs.BASE_PATH }}"
-          git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }
-

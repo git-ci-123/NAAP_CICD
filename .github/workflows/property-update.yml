@@ -103,8 +103,8 @@ jobs:
             SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
 
             if [ -z "$SCHEMA_USER" ] || [ -z "$SCHEMA_PASS" ]; then
-              echo "⚠️ Warning: Credentials not found for schema $SCHEMA_NAME. Skipping..."
-              continue
+              echo "⚠️ ERROR: Credentials not found for schema $SCHEMA_NAME. Skipping..."
+              exit 1
             fi
 
             echo "✅ Found schema: $SCHEMA_NAME | Changelog: $(basename "$CHANGELOG_FILE")"

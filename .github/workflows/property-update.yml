@@ -68,60 +68,36 @@ jobs:
           fi
           echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
 
-      - name: Execute Liquibase Migration for Multiple Schemas
-        env:
-          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
-          DB_USER_APPCATALOG: ${{ secrets.APPCATALOG_DEV_USER }}
-          DB_PASSWORD_APPCATALOG: ${{ secrets.APPCATALOG_DEV_PASSWD }}
-          DB_USER_BACATALOG: ${{ secrets.BACATALOG_DEV_USER }}
-          DB_PASSWORD_BACATALOG: ${{ secrets.BACATALOG_DEV_PASSWD }}
-          DB_USER_CATALOG: ${{ secrets.CATALOG_DEV_USER }}
-          DB_PASSWORD_CATALOG: ${{ secrets.CATALOG_DEV_PASSWD }}
+      - name: Find Changelog Files
+        id: find_changelogs
         run: |
           RELEASE_PATH="NAAP_DB/$RELEASE_FOLDER"
           echo "🚀 Processing release: $RELEASE_FOLDER"
 
-          # Iterate over each schema folder
-          find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
-            SCHEMA_FULL_NAME=$(basename "$schema_folder")
-            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract schema name after "_"
+          CHANGELOG_FILES=""
+          find "$RELEASE_PATH" -maxdepth 2 -type f -name "*-changelog.xml" | while read -r changelog; do
+            SCHEMA_NAME=$(basename "$changelog" | cut -d'-' -f1)  # Extract schema name from filename
+            echo "✅ Found changelog for schema: $SCHEMA_NAME -> $changelog"
 
-            # Fetch credentials dynamically based on extracted schema name
-            SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
-            SCHEMA_PASS_VAR="DB_PASSWORD_${SCHEMA_NAME}"
-
-            # Get the value from preloaded env variables
-            SCHEMA_USER="${!SCHEMA_USER_VAR}"
-            SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
-
-            # Validate if credentials exist
-            if [ -z "$SCHEMA_USER" ]; then
-              echo "⚠️ Warning: User credential not found for schema $SCHEMA_NAME. Skipping schema..."
-              continue
-            fi
-            if [ -z "$SCHEMA_PASS" ]; then
-              echo "⚠️ Warning: Password credential not found for schema $SCHEMA_NAME. Skipping schema..."
-              continue
-            fi
-
-            echo "✅ Found credentials for schema: $SCHEMA_NAME"
-
-            # Define expected changelog file format (e.g., APPCATALOG-changelog.xml)
-            CHANGELOG_FILE="${schema_folder}/${SCHEMA_NAME}-changelog.xml"
-
-            if [ -f "$CHANGELOG_FILE" ]; then
-              echo "📝 Running Liquibase with $CHANGELOG_FILE"
-
-              # Use Liquibase GitHub Action
-              liquibase/liquibase-github-action@v4:
-                with:
-                  operation: "update"
-                  classpath: "$schema_folder"
-                  changeLogFile: "$CHANGELOG_FILE"
-                  url: "$LIQUIBASE_COMMAND_URL"
-                  username: "$SCHEMA_USER"
-                  password: "$SCHEMA_PASS"
-            else
-              echo "⚠️ Warning: Changelog file $CHANGELOG_FILE not found. Skipping schema..."
-            fi
+            # Store schema and changelog in a variable for GitHub Actions
+            CHANGELOG_FILES+="$SCHEMA_NAME|$changelog"$'\n'
           done
+
+          if [ -z "$CHANGELOG_FILES" ]; then
+            echo "❌ Error: No changelog files found!"
+            exit 1
+          fi
+
+          # Save the changelog file paths to an output
+          echo "changelogs<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG_FILES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Run Liquibase Migration for Each Schema
+        uses: liquibase/liquibase-github-action@v4
+        with:
+          operation: "update"
+          url: ${{ secrets.DB_DEV_URL }}
+          username: ${{ secrets.APPCATALOG_DEV_USER }}
+          password: ${{ secrets.APPCATALOG_DEV_PASSWD }}
+          changeLogFile: "${{ env.changelogs }}"

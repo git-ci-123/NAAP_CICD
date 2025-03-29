@@ -33,7 +33,7 @@ jobs:
       - name: Validate Base Path in Releasemanagement Branch
         run: |
           BASE_PATH="${{ github.event.inputs.base_path }}"
-          if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
+          if [ ! -d "NAAP_Release/$BASE_PATH" ]; then
             echo "❌ Error: Base path $BASE_PATH not found!"
             exit 1
           fi
@@ -68,34 +68,24 @@ jobs:
           fi
           echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
  
-      - name: Run Liquibase Migrations for Available Schemas
-        env:
-          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
-          DB_USER_APPCATALOG: ${{ secrets.APPCATALOG_DEV_USER }}
-          DB_PASSWORD_APPCATALOG: ${{ secrets.APPCATALOG_DEV_PASSWD }}
-          DB_USER_BACATALOG: ${{ secrets.BACATALOG_DEV_USER }}
-          DB_PASSWORD_BACATALOG: ${{ secrets.BACATALOG_DEV_PASSWD }}
-          DB_USER_CATALOG: ${{ secrets.CATALOG_DEV_USER }}
-          DB_PASSWORD_CATALOG: ${{ secrets.CATALOG_DEV_PASSWD }}
+      - name: Find Available Schemas and Prepare for Liquibase
+        id: find_schemas
         run: |
           RELEASE_PATH="NAAP_DB/$RELEASE_FOLDER"
           echo "🚀 Processing release: $RELEASE_FOLDER"
+          SCHEMA_INFO=""
 
-          # Iterate over schema folders dynamically
-          find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
+          for schema_folder in "$RELEASE_PATH"/*/; do
             SCHEMA_FULL_NAME=$(basename "$schema_folder")
-            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract schema name after "_"
+            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)
             CHANGELOG_FILE="$schema_folder/${SCHEMA_NAME}-changelog.xml"
 
-            # Fetch credentials dynamically based on extracted schema name
             SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
             SCHEMA_PASS_VAR="DB_PASSWORD_${SCHEMA_NAME}"
 
-            # Get the value from preloaded env variables
             SCHEMA_USER="${!SCHEMA_USER_VAR}"
             SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
 
-            # Validate if credentials exist
             if [ -z "$SCHEMA_USER" ] || [ -z "$SCHEMA_PASS" ]; then
               echo "❌ Error: Missing credentials for schema $SCHEMA_NAME!"
               exit 1
@@ -107,18 +97,25 @@ jobs:
             fi
 
             echo "✅ Found schema: $SCHEMA_NAME | Changelog: $(basename "$CHANGELOG_FILE")"
+            SCHEMA_INFO+="$SCHEMA_NAME:$SCHEMA_USER:$SCHEMA_PASS:$CHANGELOG_FILE\n"
+          done
 
-            # Store values in GitHub Actions environment for the next step
-            echo "SCHEMA_NAME=$SCHEMA_NAME" >> $GITHUB_ENV
-            echo "SCHEMA_USER=$SCHEMA_USER" >> $GITHUB_ENV
-            echo "SCHEMA_PASS=$SCHEMA_PASS" >> $GITHUB_ENV
-            echo "CHANGELOG_FILE=$CHANGELOG_FILE" >> $GITHUB_ENV
+          if [ -z "$SCHEMA_INFO" ]; then
+            echo "❌ Error: No valid schemas found!"
+            exit 1
+          fi
+
+          echo -e "$SCHEMA_INFO" > /tmp/schema_info.txt
+          echo "SCHEMA_INFO=/tmp/schema_info.txt" >> $GITHUB_ENV
 
       - name: Execute Liquibase Action
         uses: liquibase/liquibase-github-action@v4
         with:
           operation: "update"
-          changelogFile: ${{ env.CHANGELOG_FILE }}
-          url: ${{ secrets.DB_DEV_URL }}
-          username: ${{ env.SCHEMA_USER }}
-          password: ${{ env.SCHEMA_PASS }}
+        env:
+          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
+        run: |
+          while IFS=":" read -r SCHEMA_NAME SCHEMA_USER SCHEMA_PASS CHANGELOG_FILE; do
+            echo "📂 Running Liquibase for schema $SCHEMA_NAME..."
+            liquibase --url="${{ secrets.DB_DEV_URL }}" --username="$SCHEMA_USER" --password="$SCHEMA_PASS" --changeLogFile="$CHANGELOG_FILE" update
+          done < $SCHEMA_INFO

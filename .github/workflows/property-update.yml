@@ -1,5 +1,5 @@
 name: Liquibase Migration
- 
+
 on:
   workflow_dispatch:
     inputs:
@@ -17,7 +17,7 @@ env:
 
 jobs:
   liquibase-migration:
-    runs-on: naap
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout CICD Repository 
         uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
       - name: Validate Base Path in Releasemanagement Branch
         run: |
           BASE_PATH="${{ github.event.inputs.base_path }}"
-          if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
+          if [ ! -d "NAAP_Release/$BASE_PATH" ]; then
             echo "❌ Error: Base path $BASE_PATH not found!"
             exit 1
           fi
@@ -68,33 +68,50 @@ jobs:
           fi
           echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
 
-      - name: Install Liquibase (if not installed)
-        run: |
-          if ! command -v liquibase &> /dev/null; then
-            echo "🔄 Installing Liquibase..."
-            curl -sSLo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/latest/download/liquibase-4.31.1.tar.gz
-            tar -xzf liquibase.tar.gz
-            sudo mv liquibase /usr/local/bin/
-            echo "✅ Liquibase installed."
-          else
-            echo "✅ Liquibase is already installed."
-          fi
-
-      - name: Run Liquibase Migration
+      - name: Run Liquibase Migration for All Schemas
         env:
           LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
           DB_USER_APPCATALOG: ${{ secrets.APPCATALOG_DEV_USER }}
           DB_PASSWORD_APPCATALOG: ${{ secrets.APPCATALOG_DEV_PASSWD }}
+          DB_USER_BACATALOG: ${{ secrets.BACATALOG_DEV_USER }}
+          DB_PASSWORD_BACATALOG: ${{ secrets.BACATALOG_DEV_PASSWD }}
+          DB_USER_ORDERCATALOG: ${{ secrets.ORDERCATALOG_DEV_USER }}
+          DB_PASSWORD_ORDERCATALOG: ${{ secrets.ORDERCATALOG_DEV_PASSWD }}
         run: |
-          CHANGELOG_FILE="NAAP_DB/$RELEASE_FOLDER/08_APPCATALOG/APPCATALOG-changelog.xml"
-          
-          if [ ! -f "$CHANGELOG_FILE" ]; then
-            echo "❌ Error: Changelog file $CHANGELOG_FILE not found!"
-            exit 1
-          fi
+          RELEASE_PATH="NAAP_DB/$RELEASE_FOLDER"
 
-          echo "🚀 Running Liquibase for APPCATALOG..."
-          liquibase --url="$LIQUIBASE_COMMAND_URL" \
-                    --username="$DB_USER_APPCATALOG" \
-                    --password="$DB_PASSWORD_APPCATALOG" \
-                    --changeLogFile="$CHANGELOG_FILE" update
+          echo "🚀 Processing release: $RELEASE_FOLDER"
+
+          # Iterate over each schema folder dynamically
+          find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
+            SCHEMA_FULL_NAME=$(basename "$schema_folder")
+            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract schema name after "_"
+
+            # Check if a changelog file exists inside the schema folder
+            CHANGELOG_FILE=$(find "$schema_folder" -maxdepth 1 -type f -name "*-changelog.xml" | head -n 1)
+
+            if [ -z "$CHANGELOG_FILE" ]; then
+              echo "⚠️ Warning: No changelog file found for $SCHEMA_NAME. Skipping..."
+              continue
+            fi
+
+            # Fetch credentials dynamically based on schema name
+            SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
+            SCHEMA_PASS_VAR="DB_PASSWORD_${SCHEMA_NAME}"
+
+            SCHEMA_USER="${!SCHEMA_USER_VAR}"
+            SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
+
+            if [ -z "$SCHEMA_USER" ] || [ -z "$SCHEMA_PASS" ]; then
+              echo "⚠️ Warning: Credentials not found for schema $SCHEMA_NAME. Skipping..."
+              continue
+            fi
+
+            echo "✅ Found schema: $SCHEMA_NAME | Changelog: $(basename "$CHANGELOG_FILE")"
+            echo "📂 Running Liquibase for schema $SCHEMA_NAME..."
+
+            liquibase --url="$LIQUIBASE_COMMAND_URL" \
+                      --username="$SCHEMA_USER" \
+                      --password="$SCHEMA_PASS" \
+                      --changeLogFile="$CHANGELOG_FILE" update
+          done

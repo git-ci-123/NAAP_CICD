@@ -68,36 +68,33 @@ jobs:
           fi
           echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
 
-      - name: Find Changelog Files
-        id: find_changelogs
+      - name: Install Liquibase (if not installed)
         run: |
-          RELEASE_PATH="NAAP_DB/$RELEASE_FOLDER"
-          echo "🚀 Processing release: $RELEASE_FOLDER"
+          if ! command -v liquibase &> /dev/null; then
+            echo "🔄 Installing Liquibase..."
+            curl -sSLo liquibase.tar.gz https://github.com/liquibase/liquibase/releases/latest/download/liquibase-4.31.1.tar.gz
+            tar -xzf liquibase.tar.gz
+            sudo mv liquibase /usr/local/bin/
+            echo "✅ Liquibase installed."
+          else
+            echo "✅ Liquibase is already installed."
+          fi
 
-          CHANGELOG_FILES=""
-          find "$RELEASE_PATH" -maxdepth 2 -type f -name "*-changelog.xml" | while read -r changelog; do
-            SCHEMA_NAME=$(basename "$changelog" | cut -d'-' -f1)  # Extract schema name from filename
-            echo "✅ Found changelog for schema: $SCHEMA_NAME -> $changelog"
-
-            # Store schema and changelog in a variable for GitHub Actions
-            CHANGELOG_FILES+="$SCHEMA_NAME|$changelog"$'\n'
-          done
-
-          if [ -z "$CHANGELOG_FILES" ]; then
-            echo "❌ Error: No changelog files found!"
+      - name: Run Liquibase Migration
+        env:
+          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
+          DB_USER_APPCATALOG: ${{ secrets.APPCATALOG_DEV_USER }}
+          DB_PASSWORD_APPCATALOG: ${{ secrets.APPCATALOG_DEV_PASSWD }}
+        run: |
+          CHANGELOG_FILE="NAAP_DB/$RELEASE_FOLDER/08_APPCATALOG/APPCATALOG-changelog.xml"
+          
+          if [ ! -f "$CHANGELOG_FILE" ]; then
+            echo "❌ Error: Changelog file $CHANGELOG_FILE not found!"
             exit 1
           fi
 
-          # Save the changelog file paths to an output
-          echo "changelogs<<EOF" >> $GITHUB_ENV
-          echo "$CHANGELOG_FILES" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
-      - name: Run Liquibase Migration for Each Schema
-        uses: liquibase/liquibase-github-action@v4
-        with:
-          operation: "update"
-          url: ${{ secrets.DB_DEV_URL }}
-          username: ${{ secrets.APPCATALOG_DEV_USER }}
-          password: ${{ secrets.APPCATALOG_DEV_PASSWD }}
-          changeLogFile: "${{ env.changelogs }}"
+          echo "🚀 Running Liquibase for APPCATALOG..."
+          liquibase --url="$LIQUIBASE_COMMAND_URL" \
+                    --username="$DB_USER_APPCATALOG" \
+                    --password="$DB_PASSWORD_APPCATALOG" \
+                    --changeLogFile="$CHANGELOG_FILE" update

@@ -1,4 +1,4 @@
-name: Liquibase Migration
+name: Liquibase test
  
 on:
   workflow_dispatch:

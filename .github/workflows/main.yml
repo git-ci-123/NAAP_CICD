@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Print secret
         env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_CREDENTIALS: ${{ secrets.DB_DEV_URL }}
         run: |
           echo "Trick to echo GitHub Actions Secret:  "
           echo "${{secrets.DB_DEV_URL}}" | xxd -ps  

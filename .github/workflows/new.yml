@@ -1,5 +1,4 @@
 name: Dev Release Management
-
 on:
   workflow_dispatch:
     inputs:
@@ -7,20 +6,15 @@ on:
         description: "Release Path"
         required: true
         type: string
-
 env:
   TARGET_REPO: "git-ci-123/NAAP_PROJECT"  # Change to your actual repo.
   PROPERTIES_BRANCH: "dev-properties"     # Branch where property files are stored.
   RELEASE_BRANCH: "releasemanagement"     # Branch where the release folder is stored.
   MANIFEST_BRANCH: "dev-manifest"         # Branch where the manifest files are stored.
   SCRIPT_BRANCH: "dev-script"             # Branch where the DB scripts are stored.
- 
 
- 
-jobs:
-  
-    
-  checkout:
+jobs:    
+  TaskPlan_Validation:
     runs-on: naap
     outputs:
       iteration: ${{ steps.extract.outputs.ITERATION }}
@@ -49,15 +43,13 @@ jobs:
           if [ ! -f "$FILE_PATH" ]; then
             echo "File not found: $FILE_PATH"
           fi
- 
+
           ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
           IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
           DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
- 
           echo "ITERATION=$ITERATION"
           echo "IMAGETAG=$IMAGETAG"
           echo "DB=$DB"
- 
           echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
           echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
           echo "DB=$DB" >> $GITHUB_OUTPUT
@@ -66,7 +58,6 @@ jobs:
         id: check_properties
         run: |
           PROP_FILES=$(find NAAP_Release/${{ inputs.release }} -type f -name "*.properties" | wc -l)
- 
           if [ "$PROP_FILES" -gt 0 ]; then
             echo "Properties files found: $PROP_FILES"
             echo "property=true" >> $GITHUB_OUTPUT
@@ -76,9 +67,9 @@ jobs:
           fi
  
   DB_Execution:
-    needs: checkout
+    needs: TaskPlan_Validation
     runs-on: naap
-    if: ${{ needs.checkout.outputs.db != '' }}
+    if: ${{ needs.TaskPlan_Validation.outputs.db != '' }}
 
     outputs:
       iteration: ${{ steps.extract.outputs.ITERATION }}
@@ -189,10 +180,10 @@ jobs:
 
   Property_Deployment:
     needs: 
-      - checkout
+      - TaskPlan_Validation
       - DB_Execution
     runs-on: naap
-    if: ${{ always() && needs.checkout.outputs.property == 'true' && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped')) }}
+    if: ${{ always() && needs.TaskPlan_Validation.outputs.property == 'true' && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped')) }}
 
     steps:
       - name: Checkout Target Repository
@@ -314,11 +305,11 @@ jobs:
 
   Application-Deployment:
     needs: 
-      - checkout
+      - TaskPlan_Validation
       - DB_Execution
       - Property_Deployment
     runs-on: naap
-    if: ${{always() && needs.checkout.outputs.imagetag != ''  && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped') || (needs.Property_Deployment.result == 'success' || needs.Property_Deployment.result == 'skipped')) }}
+    if: ${{always() && needs.TaskPlan_Validation.outputs.imagetag != ''  && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped') || (needs.Property_Deployment.result == 'success' || needs.Property_Deployment.result == 'skipped')) }}
 
     permissions:
       id-token: write 
@@ -331,7 +322,7 @@ jobs:
     steps:
 
       - name: Checkout Project Repository - Release Branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           repository:  ${{ env.TARGET_REPO }}
           token: ${{ secrets.PAT_TOKEN }}    
@@ -358,7 +349,7 @@ jobs:
         run: |
           pwd
           ls -ltr
-          IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
+          IFS=',' read -r -a IMAGES <<< "${{ needs.TaskPlan_Validation.outputs.imagetag }}"
 
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
@@ -378,7 +369,7 @@ jobs:
           
       - name: Apply Kubernetes Manifests
         run: |
-          IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
+          IFS=',' read -r -a IMAGES <<< "${{ needs.TaskPlan_Validation.outputs.imagetag }}"
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
             YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"

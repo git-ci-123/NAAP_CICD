@@ -352,8 +352,7 @@ jobs:
       - name: Update Kubeconfig
         run: |
           aws eks update-kubeconfig --name naapdev --region us-east-2
-          kubectl config get-contexts
-          kubectl get nodes
+          
 
       - name: Replace Image Tags in Kubernetes Manifests (No Commit)
         run: |
@@ -384,8 +383,7 @@ jobs:
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
             YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"
             if [ -f "$YAML_FILE" ]; then
-              cat ~/.kube/config
-              kubectl config get-contexts
+              
               echo "$YAML_FILE updated"
               cat $YAML_FILE
               aws eks update-kubeconfig --name naapdev --region us-east-2

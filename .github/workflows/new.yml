@@ -79,6 +79,12 @@ jobs:
     needs: checkout
     runs-on: naap
     if: ${{ needs.checkout.outputs.db != '' }}
+
+    outputs:
+      iteration: ${{ steps.extract.outputs.ITERATION }}
+      imagetag: ${{ steps.extract.outputs.IMAGETAG }}
+      db: ${{ steps.extract.outputs.DB }}
+      
     steps:
       - name: Checkout Release Repository
         uses: actions/checkout@v4
@@ -90,7 +96,7 @@ jobs:
       - name: Extract Release Folder from [DB] in input.txt
         id: read_input
         run: |
-          RELEASE_FOLDER=$(sed -n '/^\[DB\]/ {n; p;}' "$BASE_PATH/input.txt" | tr -d '\r')
+          RELEASE_FOLDER=$db
           if [ -z "$RELEASE_FOLDER" ]; then
             echo "❌ Error: Could not extract release folder!"
             exit 1

@@ -1,4 +1,4 @@
-name: Dev-Release-Management
+name: Dev Release Management
 
 on:
   workflow_dispatch:

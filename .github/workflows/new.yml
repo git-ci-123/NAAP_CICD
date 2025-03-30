@@ -1,10 +1,10 @@
-name: Consolidated Workflow
+name: Dev Release Management
 
 on:
   workflow_dispatch:
     inputs:
-      BASE_PATH:
-        description: "Base path for the release folder"
+      release:
+        description: "Release Path"
         required: true
         type: string
 
@@ -14,10 +14,185 @@ env:
   RELEASE_BRANCH: "releasemanagement"     # Branch where the release folder is stored.
   MANIFEST_BRANCH: "dev-manifest"         # Branch where the manifest files are stored.
   SCRIPT_BRANCH: "dev-script"             # Branch where the DB scripts are stored.
+ 
 
+ 
 jobs:
-  update_properties:
+  
+    
+  checkout:
     runs-on: naap
+    outputs:
+      iteration: ${{ steps.extract.outputs.ITERATION }}
+      imagetag: ${{ steps.extract.outputs.IMAGETAG }}
+      db: ${{ steps.extract.outputs.DB }}
+      property: ${{ steps.check_properties.outputs.property }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Checkout Project Repository
+        uses: actions/checkout@v4
+        with:
+          repository:  ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: ${{ env.RELEASE_BRANCH }}
+          path: 'NAAP_Release'
+ 
+      - name: Read Inputs from File
+        id: extract
+        run: |
+          ls -ltr
+          RELEASE_VERSION=${{ inputs.release }}
+          FILE_PATH="NAAP_Release/${RELEASE_VERSION}/TaskPlan"
+ 
+          if [ ! -f "$FILE_PATH" ]; then
+            echo "File not found: $FILE_PATH"
+          fi
+ 
+          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
+          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
+ 
+          echo "ITERATION=$ITERATION"
+          echo "IMAGETAG=$IMAGETAG"
+          echo "DB=$DB"
+ 
+          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
+          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
+          echo "DB=$DB" >> $GITHUB_OUTPUT
+
+      - name: Check for properties Files
+        id: check_properties
+        run: |
+          PROP_FILES=$(find NAAP_Release/${{ inputs.release }} -type f -name "*.properties" | wc -l)
+ 
+          if [ "$PROP_FILES" -gt 0 ]; then
+            echo "Properties files found: $PROP_FILES"
+            echo "property=true" >> $GITHUB_OUTPUT
+          else
+            echo "No properties files found"
+            echo "property=" >> $GITHUB_OUTPUT
+          fi
+ 
+  DB_Execution:
+    needs: checkout
+    runs-on: naap
+    if: ${{ needs.checkout.outputs.db != '' }}
+
+    outputs:
+      iteration: ${{ steps.extract.outputs.ITERATION }}
+      imagetag: ${{ steps.extract.outputs.IMAGETAG }}
+      db: ${{ steps.extract.outputs.DB }}
+      
+    steps:
+      - name: Checkout Release Repository
+        uses: actions/checkout@v4
+        with:
+          repository:  ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: ${{ env.RELEASE_BRANCH }}
+          path: 'NAAP_Release' 
+          
+      - name: Validate Base Path in Releasemanagement Branch
+        run: |
+          pwd
+          ls
+          BASE_PATH="${{ github.event.inputs.release }}"
+          if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
+            echo "❌ Error: Base path $BASE_PATH not found!"
+            exit 1
+          fi
+          echo "BASE_PATH=NAAP_Release/$BASE_PATH" >> $GITHUB_ENV
+          echo "✅ Base path NAAP_Release/$BASE_PATH found."
+      - name: Extract Release Folder from [DB] in TaskPlan
+        id: read_input
+        run: |
+          RELEASE_FOLDER=$(sed -n '/^\[DB\]/ {n; p;}' "$BASE_PATH/TaskPlan" | tr -d '\r')
+          if [ -z "$RELEASE_FOLDER" ]; then
+            echo "❌ Error: Could not extract release folder!"
+            exit 1
+          fi
+          echo "RELEASE_FOLDER=$RELEASE_FOLDER" >> $GITHUB_ENV
+          echo "✅ Extracted release folder: $RELEASE_FOLDER."
+ 
+      - name: Checkout DB Scripts (db-scripts branch)
+        uses: actions/checkout@v4
+        with:
+          repository:  ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: ${{ env.SCRIPT_BRANCH }}
+          path: 'NAAP_DB'
+ 
+      - name: Validate Release Folder in DB Scripts Branch
+        run: |
+          DB_SCRIPTS_PATH="NAAP_DB/$RELEASE_FOLDER"
+          if [ ! -d "$DB_SCRIPTS_PATH" ]; then
+            echo "❌ Error: Release folder $RELEASE_FOLDER not found in db-scripts branch!"
+            exit 1
+          fi
+          echo "✅ Release folder $RELEASE_FOLDER found in db-scripts branch."
+ 
+      - name: Execute Liquibase Scripts for Multiple Schemas
+        env:
+          LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
+          DB_USER_APPCATALOG: ${{ secrets.APPCATALOG_DEV_USER }}
+          DB_PASSWORD_APPCATALOG: ${{ secrets.APPCATALOG_DEV_PASSWD }}
+          DB_USER_BACATALOG: ${{ secrets.BACATALOG_DEV_USER }}
+          DB_PASSWORD_BACATALOG: ${{ secrets.BACATALOG_DEV_PASSWD }}
+          DB_USER_CATALOG: ${{ secrets.CATALOG_DEV_USER }}
+          DB_PASSWORD_CATALOG: ${{ secrets.CATALOG_DEV_PASSWD }}
+        run: |
+          RELEASE_PATH="NAAP_DB/$RELEASE_FOLDER"
+          echo "🚀 Processing release: $RELEASE_FOLDER"
+
+          # Iterate over each schema folder (e.g., 08_APPCATALOG, 09_BACATALOG)
+          find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
+            SCHEMA_FULL_NAME=$(basename "$schema_folder")
+            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | cut -d'_' -f2)  # Extract schema name after "_"
+
+            # Fetch credentials dynamically based on extracted schema name
+            SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"
+            SCHEMA_PASS_VAR="DB_PASSWORD_${SCHEMA_NAME}"
+
+            # Get the value from preloaded env variables
+            SCHEMA_USER="${!SCHEMA_USER_VAR}"
+            SCHEMA_PASS="${!SCHEMA_PASS_VAR}"
+
+            # Validate if credentials exist
+            if [ -z "$SCHEMA_USER" ]; then
+              echo "⚠️ Warning: User credential not found for schema $SCHEMA_NAME. Skipping schema..."
+              continue
+            fi
+            if [ -z "$SCHEMA_PASS" ]; then
+              echo "⚠️ Warning: Password credential not found for schema $SCHEMA_NAME. Skipping schema..."
+              continue
+            fi
+
+            echo "✅ Found credentials for schema: $SCHEMA_NAME"
+
+            # Iterate through subfolders and apply scripts
+            find "$schema_folder" -type d | sort | while read -r subfolder; do
+              echo "📁 Executing in: $subfolder"
+              find "$subfolder" -type f -name "*.sql" | sort | while read -r script; do
+                echo "📝 Running $script"
+                if ! liquibase --url="$LIQUIBASE_COMMAND_URL" --username="$SCHEMA_USER" --password="$SCHEMA_PASS" --changeLogFile="$script" update; 
+                then
+                  echo "❌ Error running $script for $SCHEMA_NAME!"
+                  exit 1
+                fi
+              done
+            done
+          done
+      
+
+
+  Property_Deployment:
+    needs: 
+      - checkout
+      - DB_Execution
+    runs-on: naap
+    if: ${{ always() && needs.checkout.outputs.property == 'true' && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped')) }}
 
     steps:
       - name: Checkout Target Repository
@@ -34,7 +209,7 @@ jobs:
           
       - name: Fetch and Checkout Release Folder from Target Repo
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="${{ github.event.inputs.release }}"
           RELEASE_BRANCH="${{ env.RELEASE_BRANCH }}"
 
           echo "Fetching release branch: $RELEASE_BRANCH from ${{ env.TARGET_REPO }}"
@@ -45,9 +220,9 @@ jobs:
 
           [ -d "$BASE_PATH" ] || { echo "::error::[ERROR] Release folder does not exist: $BASE_PATH"; exit 1; }
 
-      - name: Process Property File Changes (Auto-Create Missing Files)
+      - name: Process Property File Changes
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="${{ github.event.inputs.release }}"
           LOG_FILE="property_changes.log"
 
           echo "Processing property file changes from $BASE_PATH..." > "$LOG_FILE"
@@ -122,7 +297,7 @@ jobs:
 
       - name: Remove Release Folder Before Commit
         run: |
-          BASE_PATH="${{ github.event.inputs.BASE_PATH }}"
+          BASE_PATH="${{ github.event.inputs.release }}"
           [ -d "$BASE_PATH" ] && git rm -rf --cached "$BASE_PATH" || echo "Folder not tracked, skipping removal"
           rm -rf "$BASE_PATH"
 
@@ -133,74 +308,85 @@ jobs:
             echo "No changes detected, skipping commit."
             exit 0
           fi
-          git commit -m "Updated properties from release folder: ${{ github.event.inputs.BASE_PATH }}"
+          git commit -m "Updated properties from release folder: ${{ github.event.inputs.release }}"
           git push origin "${{ env.PROPERTIES_BRANCH }}" || { echo "::error::Push failed!"; exit 1; }
 
 
-  read-inputs:
+  Application-Deployment:
+    needs: 
+      - checkout
+      - DB_Execution
+      - Property_Deployment
     runs-on: naap
+    if: ${{always() && needs.checkout.outputs.imagetag != ''  && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped') || (needs.Property_Deployment.result == 'success' || needs.Property_Deployment.result == 'skipped')) }}
+
+    permissions:
+      id-token: write 
+      contents: read
+      
     outputs:
       iteration: ${{ steps.extract.outputs.ITERATION }}
       imagetag: ${{ steps.extract.outputs.IMAGETAG }}
       db: ${{ steps.extract.outputs.DB }}
     steps:
 
-      - name: Read Inputs from File
-        id: extract
+      - name: Checkout Project Repository - Release Branch
+        uses: actions/checkout@v2
+        with:
+          repository:  ${{ env.TARGET_REPO }}
+          token: ${{ secrets.PAT_TOKEN }}    
+          ref: ${{ env.MANIFEST_BRANCH }}
+          path: 'NAAP_Manifest'
+          
+      - name: Configure AWS Account
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::692859914710:role/GitHubActionsEKSRole
+          role-session-name: GitHubActions
+          aws-region: us-east-2
+
+      - name: Verify AWS Role
         run: |
-          RELEASE_VERSION=${{ inputs.release }}
-          FILE_PATH="release/${RELEASE_VERSION}/input.txt"
-
-          if [ ! -f "$FILE_PATH" ]; then
-            echo "File not found: $FILE_PATH"
-            exit 1
-          fi
-
-          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
-          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
-          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
-
-          echo "ITERATION=$ITERATION"
-          echo "IMAGETAG=$IMAGETAG"
-          echo "DB=$DB"
-
-          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
-          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
-          echo "DB=$DB" >> $GITHUB_OUTPUT
-
+          aws sts get-caller-identity
       
       - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --name stardust --region us-east-1
+        run: |
+          aws eks update-kubeconfig --name naapdev --region us-east-2
+          
 
       - name: Replace Image Tags in Kubernetes Manifests (No Commit)
         run: |
-          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
+          pwd
+          ls -ltr
+          IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
 
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
-            TAG=$(echo $IMAGE | cut -d'_' -f2)      # Extract tag (v1, v2, etc.)
+            TAG=$(echo $IMAGE)      # Extract tag (v1, v2, etc.)
 
-            YAML_FILE="external-repo/manifest/${SERVICE}.yaml" 
+            YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml" 
             if [ -f "$YAML_FILE" ]; then
               echo "Updating $YAML_FILE with image tag $TAG"
               sed -i "s|{{imagetag}}|${TAG}|g" "$YAML_FILE"
+              
             else
               echo "Warning: YAML file not found for $SERVICE"
             fi
           done
-
+          
+      
+          
       - name: Apply Kubernetes Manifests
         run: |
-          IFS=',' read -r -a IMAGES <<< "${{ needs.read-inputs.outputs.imagetag }}"
+          IFS=',' read -r -a IMAGES <<< "${{ needs.checkout.outputs.imagetag }}"
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)
-            YAML_FILE="manifest/${SERVICE}.yaml"  # Update to reflect the new location
+            YAML_FILE="NAAP_Manifest/manifest/${SERVICE}.yaml"
             if [ -f "$YAML_FILE" ]; then
-              kubectl apply -f "$YAML_FILE"
+              
+              echo "$YAML_FILE updated"
+              cat $YAML_FILE
+              aws eks update-kubeconfig --name naapdev --region us-east-2
+              kubectl apply -f $YAML_FILE --validate=false
             fi
           done
-
-
-
-
-    

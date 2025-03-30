@@ -176,8 +176,6 @@ jobs:
             done
           done
       
-
-
   Property_Deployment:
     needs: 
       - TaskPlan_Validation
@@ -310,7 +308,6 @@ jobs:
       - Property_Deployment
     runs-on: naap
     if: ${{always() && needs.TaskPlan_Validation.outputs.imagetag != ''  && ((needs.DB_Execution.result == 'success' || needs.DB_Execution.result == 'skipped') || (needs.Property_Deployment.result == 'success' || needs.Property_Deployment.result == 'skipped')) }}
-
     permissions:
       id-token: write 
       contents: read
@@ -320,7 +317,6 @@ jobs:
       imagetag: ${{ steps.extract.outputs.IMAGETAG }}
       db: ${{ steps.extract.outputs.DB }}
     steps:
-
       - name: Checkout Project Repository - Release Branch
         uses: actions/checkout@v4
         with:
@@ -328,29 +324,23 @@ jobs:
           token: ${{ secrets.PAT_TOKEN }}    
           ref: ${{ env.MANIFEST_BRANCH }}
           path: 'NAAP_Manifest'
-          
       - name: Configure AWS Account
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: arn:aws:iam::692859914710:role/GitHubActionsEKSRole
           role-session-name: GitHubActions
           aws-region: us-east-2
-
       - name: Verify AWS Role
         run: |
           aws sts get-caller-identity
-      
       - name: Update Kubeconfig
         run: |
           aws eks update-kubeconfig --name naapdev --region us-east-2
-          
-
       - name: Replace Image Tags in Kubernetes Manifests (No Commit)
         run: |
           pwd
           ls -ltr
           IFS=',' read -r -a IMAGES <<< "${{ needs.TaskPlan_Validation.outputs.imagetag }}"
-
           for IMAGE in "${IMAGES[@]}"; do
             SERVICE=$(echo $IMAGE | cut -d'_' -f1)  # Extract service name (cas, catalog, eureka)
             TAG=$(echo $IMAGE)      # Extract tag (v1, v2, etc.)
@@ -364,8 +354,6 @@ jobs:
               echo "Warning: YAML file not found for $SERVICE"
             fi
           done
-          
-      
           
       - name: Apply Kubernetes Manifests
         run: |
@@ -381,3 +369,25 @@ jobs:
               kubectl apply -f $YAML_FILE --validate=false
             fi
           done
+  Email-Notification:
+    runs-on: ubuntu-latest
+    needs: [Property_Deployment,DB_Execution,Application-Deployment]
+    if: always()
+    steps:
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.office365.com
+          server_port: 587
+          username: "your-email@domain.com"
+          password: "${{ secrets.MAIL_PASSWORD }}"
+          subject: "CI/CD Pipeline - ${{ job.status }}"
+          body: |
+            The CI/CD pipeline has completed.          
+            Status: ${{ job.status }}
+            - Database Scripts: ${{ needs.Database-Scripts.result }}
+            - Property Update: ${{ needs.Property-Update.result }}
+            - Application Deployment: ${{ needs.Application-Deployment.result }}        
+            Check logs for details.
+          to: "stakeholder@domain.com"
+          from: "your-email@domain.com"

@@ -377,7 +377,7 @@ jobs:
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: mail.excelacom.in
+          server_address: mx-02-us-east-2.prod.hydra.sophos.com
           server_port: 25
           username: "krishnakumar.s"
           password: "${{ secrets.MAIL_PASSWORD }}"

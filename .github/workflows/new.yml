@@ -98,7 +98,7 @@ jobs:
         run: |
           pwd
           ls
-          BASE_PATH="${{ github.event.inputs.base_path }}"
+          BASE_PATH="${{ github.event.inputs.release }}"
           if [ ! -d NAAP_Release/"$BASE_PATH" ]; then
             echo "❌ Error: Base path $BASE_PATH not found!"
             exit 1

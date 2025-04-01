@@ -38,7 +38,7 @@ jobs:
         run: |
           ls -ltr
           RELEASE_VERSION=${{ inputs.release }}
-          FILE_PATH="NAAP_Release/${RELEASE_VERSION}/TaskPlan"
+          FILE_PATH="NAAP_Release/${RELEASE_VERSION}/TaskPlan.txt"
  
           if [ ! -f "$FILE_PATH" ]; then
             echo "File not found: $FILE_PATH"
@@ -105,7 +105,7 @@ jobs:
       - name: Extract Release Folder from [DB] in TaskPlan
         id: read_input
         run: |
-          RELEASE_FOLDER=$(sed -n '/^\[DB\]/ {n; p;}' "$BASE_PATH/TaskPlan" | tr -d '\r')
+          RELEASE_FOLDER=$(sed -n '/^\[DB\]/ {n; p;}' "$BASE_PATH/TaskPlan.txt" | tr -d '\r')
           if [ -z "$RELEASE_FOLDER" ]; then
             echo "❌ Error: Could not extract release folder!"
             exit 1

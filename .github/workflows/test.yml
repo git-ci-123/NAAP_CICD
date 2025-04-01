@@ -76,17 +76,17 @@ jobs:
     
     if: always()
     steps:
-      - name: Send Email Notification
-        uses: dawidd6/action-send-mail@v3
+      - name: Send Email
+        uses: dawidd6/action-send-mail@v2
         with:
-          server_address: mx-02-us-east-2.prod.hydra.sophos.com
-          server_port: 25
-          username: "krishnakumar.s@excelacom.in"
-          password: "${{ secrets.MAIL_PASSWORD }}"
-          subject: "CI/CD Pipeline - ${{ job.status }}"
-          body: |
-            Hi
-            
-          to: "itsupport@excelacom.in"
-          from: "krishnakumar.s@excelacom.in"
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Checking mail for git"
+          to: sundaran.n@excelacom.in
+          from: ${{ secrets.EMAIL_USERNAME }} 
+          body: "GitHub Actions test."
+          secure: true
+      
 

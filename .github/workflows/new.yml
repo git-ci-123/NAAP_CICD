@@ -65,6 +65,12 @@ jobs:
             echo "No properties files found"
             echo "property=" >> $GITHUB_OUTPUT
           fi
+      - name: Debug TaskPlan_Validation Outputs
+        run: |
+          echo "DB: ${{ needs.TaskPlan_Validation.outputs.db }}"
+          echo "Image Tag: ${{ needs.TaskPlan_Validation.outputs.imagetag }}"
+          echo "Iteration: ${{ needs.TaskPlan_Validation.outputs.iteration }}"
+
  
   DB_Execution:
     needs: TaskPlan_Validation

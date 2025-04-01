@@ -85,7 +85,7 @@ jobs:
           password: ${{ secrets.MAIL_PASSWORD }}
           subject: "Checking mail for git"
           to: sundaran.n@excelacom.in
-          from: ${{ secrets.EMAIL_USERNAME }} 
+          from: githubactionstest1@gmail.com
           body: "GitHub Actions test."
           secure: true
       

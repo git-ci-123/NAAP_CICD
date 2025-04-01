@@ -369,46 +369,4 @@ jobs:
               kubectl apply -f $YAML_FILE --validate=false
             fi
           done
-  Email-Notification:
-    runs-on: ubuntu-latest
-    needs: [Property_Deployment,DB_Execution,Application-Deployment]
-    if: always()
-    steps:
-      - name: Send Email Notification
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: mx-02-us-east-2.prod.hydra.sophos.com
-          server_port: 25
-          username: "krishnakumar.s@excelacom.in"
-          password: "${{ secrets.MAIL_PASSWORD }}"
-          subject: "CI/CD Pipeline - ${{ job.status }}"
-          body: |
-            <html>
-              <body style="font-family: Arial, sans-serif; color: #333;">
-                <h2>CI/CD Pipeline Notification</h2>
-                <p><strong>Status:</strong> <span style="color: ${{
-                  job.status == 'success' && 'green' || 'red' }};">
-                  ${{ job.status }}</span></p>
-                <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse;">
-                  <tr>
-                    <th>Stage</th>
-                    <th>Status</th>
-                  </tr>
-                  <tr>
-                    <td>Database Scripts</td>
-                    <td>${{ needs.Database-Scripts.result }}</td>
-                  </tr>
-                  <tr>
-                    <td>Property Update</td>
-                    <td>${{ needs.Property-Update.result }}</td>
-                  </tr>
-                  <tr>
-                    <td>Application Deployment</td>
-                    <td>${{ needs.Application-Deployment.result }}</td>
-                  </tr>
-                </table>
-                <p>Check the logs for more details.</p>
-              </body>
-            </html>
-          to: "krishnakumar.s@excelacom.in"
-          from: "krishnakumar.s@excelacom.in"
+  

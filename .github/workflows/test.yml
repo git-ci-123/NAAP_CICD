@@ -1,80 +1,16 @@
 name: Email
 
+
+
+
+
 on:
   workflow_dispatch:
-    inputs:
-      release:
-        description: "Release Path"
-        required: true
-        type: string
-
-env:
-  TARGET_REPO: "git-ci-123/NAAP_PROJECT"  # Change to your actual repo.
-  PROPERTIES_BRANCH: "dev-properties"     # Branch where property files are stored.
-  RELEASE_BRANCH: "releasemanagement"     # Branch where the release folder is stored.
-  MANIFEST_BRANCH: "dev-manifest"         # Branch where the manifest files are stored.
-  SCRIPT_BRANCH: "dev-script"             # Branch where the DB scripts are stored.
 
 jobs:
-
-  checkout:
-    runs-on: naap
-    outputs:
-      iteration: ${{ steps.extract.outputs.ITERATION }}
-      imagetag: ${{ steps.extract.outputs.IMAGETAG }}
-      db: ${{ steps.extract.outputs.DB }}
-      property: ${{ steps.check_properties.outputs.property }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Checkout Project Repository
-        uses: actions/checkout@v4
-        with:
-          repository:  ${{ env.TARGET_REPO }}
-          token: ${{ secrets.PAT_TOKEN }}    
-          ref: ${{ env.RELEASE_BRANCH }}
-          path: 'NAAP_Release'
- 
-      - name: Read Inputs from File
-        id: extract
-        run: |
-          ls -ltr
-          RELEASE_VERSION=${{ inputs.release }}
-          FILE_PATH="NAAP_Release/${RELEASE_VERSION}/TaskPlan"
- 
-          if [ ! -f "$FILE_PATH" ]; then
-            echo "File not found: $FILE_PATH"
-          fi
- 
-          ITERATION=$(awk '/\[ITERATION\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
-          IMAGETAG=$(awk '/\[IMAGETAG\]/ {flag=1; next} /\[DB\]/ {flag=0} flag' $FILE_PATH | tr '\n' ',' | sed 's/,$//')
-          DB=$(awk '/\[DB\]/{getline; print}' $FILE_PATH | tr -d '[:space:]')
- 
-          echo "ITERATION=$ITERATION"
-          echo "IMAGETAG=$IMAGETAG"
-          echo "DB=$DB"
- 
-          echo "ITERATION=$ITERATION" >> $GITHUB_OUTPUT
-          echo "IMAGETAG=$IMAGETAG" >> $GITHUB_OUTPUT
-          echo "DB=$DB" >> $GITHUB_OUTPUT
-
-      - name: Check for properties Files
-        id: check_properties
-        run: |
-          PROP_FILES=$(find NAAP_Release/${{ inputs.release }} -type f -name "*.properties" | wc -l)
- 
-          if [ "$PROP_FILES" -gt 0 ]; then
-            echo "Properties files found: $PROP_FILES"
-            echo "property=true" >> $GITHUB_OUTPUT
-          else
-            echo "No properties files found"
-            echo "property=" >> $GITHUB_OUTPUT
-          fi
-  Email-Notification:
+  send_email:
     runs-on: ubuntu-latest
-    
-    if: always()
+
     steps:
       - name: Send Email
         uses: dawidd6/action-send-mail@v2
@@ -83,10 +19,11 @@ jobs:
           server_port: 465
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "Checking mail for git"
+          subject: "Test Email from GitHub Actions"
           to: sundaran.n@excelacom.in
           from: githubactionstest1@gmail.com
           body: "GitHub Actions test."
           secure: true
-      
 
+  
+  

@@ -1,4 +1,4 @@
-name: Consolidated Workflow - try
+name: Email
 
 on:
   workflow_dispatch:

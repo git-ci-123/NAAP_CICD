@@ -87,6 +87,6 @@ jobs:
           body: |
             Hi
             
-          to: "sundaran.n@excelacom.in"
+          to: "itsupport@excelacom.in"
           from: "krishnakumar.s@excelacom.in"
 

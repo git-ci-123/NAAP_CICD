@@ -18,12 +18,12 @@ jobs:
       with:
         server_address: smtp.gmail.com
         server_port: 465
-        username: ${{ secrets.EMAIL_USERNAME }}
-        password: ${{ secrets.MAIL_PASSWORD }}
+        username: githubactionstest1@gmail.com
+        password: DevopsAdmin@123
         subject: "GitHub Actions Email Test"
         body: "Hello! This email was sent from a GitHub Actions workflow."
         to: "sundaran.n@excelacom.in"
-        from: "GitHub Actions <${{ secrets.EMAIL_USERNAME }}>"
+        from: "githubactionstest1@gmail.com"
         secure: true
 
     

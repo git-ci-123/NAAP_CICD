@@ -16,7 +16,7 @@ jobs:
           password: "${{ secrets.MAIL_PASSWORD }}"
           subject: "CI/CD Pipeline"
           body: |
-           Hi
+           Hi, just a check for email.
           to: "KrishnaKumar.S@excelacom.in"
           from: "Sundaran.N@excelacom.in"
 

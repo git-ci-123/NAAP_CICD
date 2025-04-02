@@ -12,13 +12,13 @@ jobs:
         with:
           server_address: mx-02-us-east-2.prod.hydra.sophos.com
           server_port: 25
-          username: "Sundaran.N@excelacom.in"
+          username: "sundaran.n@excelacom.in"
           password: "${{ secrets.MAIL_PASSWORD }}"
           subject: "CI/CD Pipeline"
           body: |
            Hi, just a check for email.
-          to: "KrishnaKumar.S@excelacom.in"
-          from: "Sundaran.N@excelacom.in"
+          to: "krishnaKumar.s@excelacom.in"
+          from: "sundaran.n@excelacom.in"
 
 
    

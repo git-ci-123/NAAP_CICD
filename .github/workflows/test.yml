@@ -18,7 +18,7 @@ jobs:
           body: |
            Hi
           to: "sundaran.n@excelacom.in"
-          from: "notifications@github.com"
+          from: "sundaran.n@excelacom.in"
 
 
    

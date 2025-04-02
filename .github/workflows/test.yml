@@ -17,7 +17,7 @@ jobs:
           subject: "CI/CD Pipeline"
           body: |
            Hi, just a check for email.
-          to: "krishnaKumar.s@excelacom.in"
+          to: "krishnakumar.s@excelacom.in"
           from: "sundaran.n@excelacom.in"
 
 

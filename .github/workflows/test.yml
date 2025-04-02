@@ -14,7 +14,7 @@ jobs:
           server_port: 25
           username: "krishnakumar.s@excelacom.in"
           password: "${{ secrets.MAIL_PASSWORD }}"
-          subject: "CI/CD Pipeline - ${{ job.status }}"
+          subject: "CI/CD Pipeline"
           body: |
            Hi
           to: "krishnakumar.s@excelacom.in"

@@ -85,7 +85,7 @@ jobs:
            The image tags are : ${{ needs.TaskPlan_Validation.outputs.imagetag }}
            The Property files are : ${{ needs.TaskPlan_Validation.outputs.property }}
            The DB url are : ${{ needs.TaskPlan_Validation.outputs.db }}
-          to: "sundaran.n@excelacom.in"
+          to: "itsupport@excelacom.in"
           from: "sundaran.n@excelacom.in"
 
  

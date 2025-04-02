@@ -67,7 +67,8 @@ jobs:
           fi
           
   Email_Notification:
-    runs-on: ubuntu-latest  
+    runs-on: ubuntu-latest
+    needs: TaskPlan_Validation
    
       
     steps:

@@ -174,12 +174,12 @@ jobs:
 
             # Validate if credentials exist
             if [ -z "$SCHEMA_USER" ]; then
-              echo "⚠️ Warning: User credential not found for schema $SCHEMA_NAME. Skipping schema..."
-              continue
+              echo "⚠️ Warning: User credential not found for schema $SCHEMA_NAME."
+              exit 1
             fi
             if [ -z "$SCHEMA_PASS" ]; then
-              echo "⚠️ Warning: Password credential not found for schema $SCHEMA_NAME. Skipping schema..."
-              continue
+              echo "⚠️ Warning: Password credential not found for schema $SCHEMA_NAME."
+              exit 1
             fi
 
             echo "✅ Found credentials for schema: $SCHEMA_NAME"

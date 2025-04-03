@@ -128,8 +128,8 @@ jobs:
            
   Database_Execution:
     needs: 
-       - TaskPlan_Validation
-       - Email_Notification
+      - TaskPlan_Validation
+      - Email_Notification
     runs-on: naap
     if: ${{ needs.TaskPlan_Validation.outputs.db != '' }}
 

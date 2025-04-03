@@ -79,50 +79,10 @@ jobs:
           password: "${{ secrets.MAIL_PASSWORD }}"
           subject: "CI/CD Pipeline"
           body: |
-           <html>
-             <head>
-               <style>
-                 table {
-                   width: 100%;
-                   border-collapse: collapse;
-                 }
-                 th, td {
-                   padding: 12px;
-                   text-align: left;
-                   border: 1px solid #ddd;
-                 }
-                 th {
-                   background-color: #f2f2f2;
-                   font-weight: bold;
-                 }
-                 tr:nth-child(even) {
-                   background-color: #f9f9f9;
-                 }
-                 tr:hover {
-                   background-color: #f1f1f1;
-                 }
-               </style>
-             </head>
-             <body>
-               <h2>CI/CD Pipeline Notification</h2>
-               <p>Hi, check the inputs that you have provided:</p>
-               <table>
-                 <tr>
-                   <th>Image Tags</th>
-                   <td>${{ needs.TaskPlan_Validation.outputs.imagetag }}</td>
-                 </tr>
-                 <tr>
-                   <th>Property Files</th>
-                   <td>${{ needs.TaskPlan_Validation.outputs.property }}</td>
-                 </tr>
-                 <tr>
-                   <th>DB URL</th>
-                   <td>${{ needs.TaskPlan_Validation.outputs.db }}</td>
-                 </tr>
-               </table>
-             </body>
-           </html>        
-           
+           Hi, check for the inputs that you have provided.
+           The image tags are : ${{ needs.TaskPlan_Validation.outputs.imagetag }}
+           The Property files are : ${{ needs.TaskPlan_Validation.outputs.property }}
+           The DB url are : ${{ needs.TaskPlan_Validation.outputs.db }}
           to: "sundaran.n@excelacom.in"
           from: "sundaran.n@excelacom.in"
            

@@ -121,8 +121,8 @@ jobs:
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: mx-02-us-east-2.prod.hydra.sophos.com
-          server_port: 25
+          server_address: smtp.gmail.com
+          server_port: 465
           username: "githubactionstest1@gmail.com"
           password: "${{ secrets.GMAIL_PASSWD }}"
           subject: "CI/CD Pipeline"

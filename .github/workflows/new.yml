@@ -123,16 +123,16 @@ jobs:
         with:
           server_address: mx-02-us-east-2.prod.hydra.sophos.com
           server_port: 25
-          username: "sundaran.n@excelacom.in"
-          password: "${{ secrets.MAIL_PASSWORD }}"
+          username: "githubactionstest1@gmail.com"
+          password: "${{ secrets.GMAIL_PASSWD }}"
           subject: "CI/CD Pipeline"
           body: |
            Hi, check for the inputs that you have provided.
            The image tags are : ${{ needs.TaskPlan_Validation.outputs.imagetag }}
            The Property files are : ${{ needs.TaskPlan_Validation.outputs.property }}
            The DB url are : ${{ needs.TaskPlan_Validation.outputs.db }}
-          to: "sundaran.n@excelacom.in"
-          from: "sundaran.n@excelacom.in"
+          to: "githubactionstest1@gmail.com"
+          from: "githubactionstest1@gmail.com"
            
   Database_Execution:
     needs: 

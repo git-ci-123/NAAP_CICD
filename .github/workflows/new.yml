@@ -201,7 +201,9 @@ jobs:
           # Iterate over each schema folder (e.g., 08_APPCATALOG, 09_BACATALOG)
           find "$RELEASE_PATH" -maxdepth 1 -mindepth 1 -type d | sort | while read -r schema_folder; do
             SCHEMA_FULL_NAME=$(basename "$schema_folder")
-            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | sed 's/^[^_]*_//')
+            #SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | sed 's/^[^_]*_//')
+            SCHEMA_NAME=$(echo "$SCHEMA_FULL_NAME" | awk -F'_' '{print $2 "_" $3}')
+
 
             # Fetch credentials dynamically based on extracted schema name
             SCHEMA_USER_VAR="DB_USER_${SCHEMA_NAME}"

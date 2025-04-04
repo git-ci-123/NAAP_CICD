@@ -8,19 +8,55 @@ on:
         type: string
 env:
 
+  #REPO AND BRANCHES
   TARGET_REPO: "git-ci-123/NAAP_PROJECT"  # Change to your actual repo.
   PROPERTIES_BRANCH: "dev-properties"     # Branch where property files are stored.
   RELEASE_BRANCH: "releasemanagement"     # Branch where the release folder is stored.
   MANIFEST_BRANCH: "dev-manifest"         # Branch where the manifest files are stored.
   SCRIPT_BRANCH: "dev-script"             # Branch where the DB scripts are stored.
-  
+
+  #DB DETAILS
   LIQUIBASE_COMMAND_URL: ${{ secrets.DB_DEV_URL }}
+  
   DB_USER_APPCATALOG: ${{ secrets.APPCATALOG_DEV_USER }}
   DB_PASSWORD_APPCATALOG: ${{ secrets.APPCATALOG_DEV_PASSWD }}
+  
   DB_USER_BACATALOG: ${{ secrets.BACATALOG_DEV_USER }}
   DB_PASSWORD_BACATALOG: ${{ secrets.BACATALOG_DEV_PASSWD }}
-  DB_USER_CATALOG: ${{ secrets.CATALOG_DEV_USER }}
-  DB_PASSWORD_CATALOG: ${{ secrets.CATALOG_DEV_PASSWD }}
+  
+  DB_USER_CA: ${{ secrets.CA_DEV_USER }}
+  DB_PASSWORD_CA: ${{ secrets.CA_DEV_PASSWD }}
+
+  DB_USER_CDM: ${{ secrets.CDM_DEV_USER }}
+  DB_PASSWORD_CDM: ${{ secrets.CDM_DEV_PASSWD }}
+
+  DB_USER_CIF: ${{ secrets.CIF_DEV_USER }}
+  DB_PASSWORD_CIF: ${{ secrets.CIF_DEV_PASSWD }}
+
+  DB_USER_CRDM: ${{ secrets.CRDM_DEV_USER }}
+  DB_PASSWORD_CRDM: ${{ secrets.CRDM_DEV_PASSWD }}
+
+  DB_USER_CRF: ${{ secrets.CRF_DEV_USER }}
+  DB_PASSWORD_CRF: ${{ secrets.CRF_DEV_PASSWD }}
+
+  DB_USER_CRPT: ${{ secrets.CRPT_DEV_USER }}
+  DB_PASSWORD_CRPT: ${{ secrets.CRPT_DEV_PASSWD }}
+
+  DB_USER_GALAXY_SHIELD: ${{ secrets.GALAXY_SHIELD_DEV_USER }}
+  DB_PASSWORD_GALAXY_SHIELD: ${{ secrets.GALAXY_SHIELD_DEV_PASSWD }}
+
+  DB_USER_GS_AUDITLOG_REPORT: ${{ secrets.GS_AUDITLOG_REPORT_DEV_USER }}
+  DB_PASSWORD_GS_AUDITLOG_REPORT: ${{ secrets.GS_AUDITLOG_REPORT_DEV_PASSWD }}
+
+  DB_USER_HISTORYS: ${{ secrets.HISTORYS_DEV_USER }}
+  DB_PASSWORD_HISTORYS: ${{ secrets.HISTORYS_DEV_PASSWD }}
+
+  DB_USER_NOTES: ${{ secrets.NOTES_DEV_USER }}
+  DB_PASSWORD_NOTES: ${{ secrets.NOTES_DEV_PASSWD }}
+
+  
+
+  
 
 
 jobs:    

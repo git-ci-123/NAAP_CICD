@@ -121,18 +121,18 @@ jobs:
       - name: Send Email Notification
         uses: dawidd6/action-send-mail@v3
         with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: "githubactionstest1@gmail.com"
-          password: "${{ secrets.GMAIL_PASSWD }}"
+          server_address: excelacom-in.mail.protection.outlook.com
+          server_port: 25
+          #username: "githubactionstest1@gmail.com"
+          #password: "${{ secrets.GMAIL_PASSWD }}"
           subject: "CI/CD Pipeline"
           body: |
            Hi, check for the inputs that you have provided.
            The image tags are : ${{ needs.TaskPlan_Validation.outputs.imagetag }}
            The Property files are : ${{ needs.TaskPlan_Validation.outputs.property }}
            The DB url are : ${{ needs.TaskPlan_Validation.outputs.db }}
-          to: "githubactionstest1@gmail.com"
-          from: "githubactionstest1@gmail.com"
+          to: "sundaran.n@excelacom.in"
+          from: "sundaran.n@excelacom.in"
            
   Database_Execution:
     needs: 

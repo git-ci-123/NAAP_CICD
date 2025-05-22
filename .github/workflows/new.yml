@@ -86,7 +86,7 @@ jobs:
         run: |
           release_folder="${{ github.event.inputs.release }}"
           echo "$release_folder"
-          file="${release_folder}/TaskPlan.txt"
+          file="NAAP_Release/${release_folder}/TaskPlan.txt"
 
           if [ ! -f "$file" ]; then
             echo "ERROR: TaskPlan.txt file not found at $file"

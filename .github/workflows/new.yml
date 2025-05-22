@@ -85,7 +85,7 @@ jobs:
         id: validate
         run: |
           release_folder="${{ github.event.inputs.release_folder }}"
-          file="release/${release_folder}/TaskPlan.txt"
+          file="${release_folder}/TaskPlan.txt"
 
           if [ ! -f "$file" ]; then
             echo "ERROR: TaskPlan.txt file not found at $file"

@@ -87,13 +87,12 @@ jobs:
           release_folder="${{ github.event.inputs.release }}"
           echo "$release_folder"
           file="NAAP_Release/${release_folder}/TaskPlan.txt"
-
+      
           if [ ! -f "$file" ]; then
             echo "ERROR: TaskPlan.txt file not found at $file"
             exit 1
           fi
-
-          # Helper to extract section lines
+      
           get_section() {
             awk -v sec="$1" '
             $0 ~ "\\[" sec "\\]" {flag=1; next}
@@ -101,41 +100,40 @@ jobs:
             flag==1 && NF > 0 {print $0}
             ' "$file"
           }
-
-          # Check section order
+      
           headers=$(grep -oP '^\[\w+\]' "$file" | tr -d '[]' | tr '\n' ',' | sed 's/,$//')
           if [ "$headers" != "IMAGETAG,DB,PROPERTY" ]; then
             echo "ERROR: Sections must be exactly [IMAGETAG], [DB], [PROPERTY] in this order."
             echo "Found sections: $headers"
             exit 1
           fi
-
-          imgtags=$(get_section IMAGETAG)
-          dbtags=$(get_section DB)
-          props=$(get_section PROPERTY)
-
-          # Determine which sections are empty
+      
+          imgtags=$(get_section IMAGETAG | paste -sd "," -)
+          dbtags=$(get_section DB | paste -sd "," -)
+          props=$(get_section PROPERTY | paste -sd "," -)
+      
+          echo "IMAGETAGS=$imgtags" >> $GITHUB_ENV
+          echo "DB=$dbtags" >> $GITHUB_ENV
+          echo "PROPERTY=$props" >> $GITHUB_ENV
+      
+          echo "imgtags=$imgtags"
+          echo "dbtags=$dbtags"
+          echo "props=$props"
+      
           if [ -z "$imgtags" ]; then
             echo "skip_image=true" >> $GITHUB_OUTPUT
           else
             echo "skip_image=false" >> $GITHUB_OUTPUT
           fi
-
+      
           if [ -z "$dbtags" ]; then
             echo "skip_db=true" >> $GITHUB_OUTPUT
           else
             echo "skip_db=false" >> $GITHUB_OUTPUT
           fi
-
+      
           if [ -z "$props" ]; then
             echo "skip_property=true" >> $GITHUB_OUTPUT
           else
             echo "skip_property=false" >> $GITHUB_OUTPUT
           fi
-
-          echo "Validation complete."
-          echo "[IMAGETAG] skip: $([[ -z "$imgtags" ]] && echo true || echo false)"
-          echo "[DB] skip: $([[ -z "$dbtags" ]] && echo true || echo false)"
-          echo "[PROPERTY] skip: $([[ -z "$props" ]] && echo true || echo false)"
- 
-      

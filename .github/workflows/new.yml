@@ -85,6 +85,7 @@ jobs:
         id: validate
         run: |
           release_folder="${{ github.event.inputs.release_folder }}"
+          echo "$release_folder"
           file="${release_folder}/TaskPlan.txt"
 
           if [ ! -f "$file" ]; then

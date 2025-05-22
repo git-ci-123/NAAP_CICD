@@ -84,7 +84,7 @@ jobs:
       - name: Validate TaskPlan.txt format
         id: validate
         run: |
-          release_folder="${{ github.event.inputs.release_folder }}"
+          release_folder="${{ github.event.inputs.release }}"
           echo "$release_folder"
           file="${release_folder}/TaskPlan.txt"
 

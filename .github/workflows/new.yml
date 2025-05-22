@@ -63,7 +63,7 @@ env:
 
 jobs:    
   TaskPlan_Validation:
-    runs-on: naap
+    runs-on: ubuntu-latest
     outputs:
       iteration: ${{ steps.extract.outputs.ITERATION }}
       imagetag: ${{ steps.extract.outputs.IMAGETAG }}
@@ -138,7 +138,7 @@ jobs:
     needs: 
       - TaskPlan_Validation
       
-    runs-on: naap
+    runs-on: ubuntu-latest
     if: ${{ needs.TaskPlan_Validation.outputs.db != '' }}
 
     outputs:
@@ -246,7 +246,7 @@ jobs:
     needs: 
       - TaskPlan_Validation
       - Database_Execution
-    runs-on: naap
+    runs-on: ubuntu-latest
     if: ${{ always() && needs.TaskPlan_Validation.outputs.property == 'true' && ((needs.Database_Execution.result == 'success' || needs.Database_Execution.result == 'skipped')) }}
 
     steps:
@@ -372,7 +372,7 @@ jobs:
       - TaskPlan_Validation
       - Database_Execution
       - Property_Deployment
-    runs-on: naap
+    runs-on: ubuntu-latest
     if: ${{always() && needs.TaskPlan_Validation.outputs.imagetag != ''  && ((needs.Database_Execution.result == 'success' || needs.Database_Execution.result == 'skipped') || (needs.Property_Deployment.result == 'success' || needs.Property_Deployment.result == 'skipped')) }}
     permissions:
       id-token: write 

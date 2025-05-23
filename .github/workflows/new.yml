@@ -82,58 +82,58 @@ jobs:
           path: 'NAAP_Release'
       
       - name: Validate TaskPlan.txt format
-  id: validate
-  run: |
-    release_folder="${{ github.event.inputs.release }}"
-    echo "$release_folder"
-    file="NAAP_Release/${release_folder}/TaskPlan.txt"
-
-    if [ ! -f "$file" ]; then
-      echo "ERROR: TaskPlan.txt file not found at $file"
-      exit 1
-    fi
-
-    get_section() {
-      awk -v sec="$1" '
-      $0 ~ "\\[" sec "\\]" {flag=1; next}
-      /^\[/ {flag=0}
-      flag==1 && NF > 0 {print $0}
-      ' "$file"
-    }
-
-    headers=$(grep -oP '^\[\w+\]' "$file" | tr -d '[]' | tr '\n' ',' | sed 's/,$//')
-    if [ "$headers" != "IMAGETAG,DB,PROPERTY" ]; then
-      echo "ERROR: Sections must be exactly [IMAGETAG], [DB], [PROPERTY] in this order."
-      echo "Found sections: $headers"
-      exit 1
-    fi
-
-    image_tag=$(get_section IMAGETAG | sed '/^\s*$/d' | paste -sd "," - | tr -d '\r')
-    db_url=$(get_section DB | sed '/^\s*$/d' | paste -sd "," - | tr -d '\r')
-    property_file=$(get_section PROPERTY | sed '/^\s*$/d' | paste -sd "," - | tr -d '\r')
-
-    echo "IMAGETAGS=$image_tag" >> $GITHUB_ENV
-    echo "DB=$db_url" >> $GITHUB_ENV
-    echo "PROPERTY=$property_file" >> $GITHUB_ENV
-
-    echo "image_tag=$image_tag"
-    echo "db_url=$db_url"
-    echo "property_file=$property_file"
-
-    if [ -z "$image_tag" ]; then
-      echo "skip_image=true" >> $GITHUB_OUTPUT
-    else
-      echo "skip_image=false" >> $GITHUB_OUTPUT
-    fi
-
-    if [ -z "$db_url" ]; then
-      echo "skip_db=true" >> $GITHUB_OUTPUT
-    else
-      echo "skip_db=false" >> $GITHUB_OUTPUT
-    fi
-
-    if [ -z "$property_file" ]; then
-      echo "skip_property=true" >> $GITHUB_OUTPUT
-    else
-      echo "skip_property=false" >> $GITHUB_OUTPUT
-    fi
+        id: validate
+        run: |
+          release_folder="${{ github.event.inputs.release }}"
+          echo "$release_folder"
+          file="NAAP_Release/${release_folder}/TaskPlan.txt"
+      
+          if [ ! -f "$file" ]; then
+            echo "ERROR: TaskPlan.txt file not found at $file"
+            exit 1
+          fi
+      
+          get_section() {
+            awk -v sec="$1" '
+            $0 ~ "\\[" sec "\\]" {flag=1; next}
+            /^\[/ {flag=0}
+            flag==1 && NF > 0 {print $0}
+            ' "$file"
+          }
+      
+          headers=$(grep -oP '^\[\w+\]' "$file" | tr -d '[]' | tr '\n' ',' | sed 's/,$//')
+          if [ "$headers" != "IMAGETAG,DB,PROPERTY" ]; then
+            echo "ERROR: Sections must be exactly [IMAGETAG], [DB], [PROPERTY] in this order."
+            echo "Found sections: $headers"
+            exit 1
+          fi
+      
+          image_tag=$(get_section IMAGETAG | sed '/^\s*$/d' | paste -sd "," - | tr -d '\r')
+          db_url=$(get_section DB | sed '/^\s*$/d' | paste -sd "," - | tr -d '\r')
+          property_file=$(get_section PROPERTY | sed '/^\s*$/d' | paste -sd "," - | tr -d '\r')
+      
+          echo "IMAGETAGS=$image_tag" >> $GITHUB_ENV
+          echo "DB=$db_url" >> $GITHUB_ENV
+          echo "PROPERTY=$property_file" >> $GITHUB_ENV
+      
+          echo "image_tag=$image_tag"
+          echo "db_url=$db_url"
+          echo "property_file=$property_file"
+      
+          if [ -z "$image_tag" ]; then
+            echo "skip_image=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_image=false" >> $GITHUB_OUTPUT
+          fi
+      
+          if [ -z "$db_url" ]; then
+            echo "skip_db=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_db=false" >> $GITHUB_OUTPUT
+          fi
+      
+          if [ -z "$property_file" ]; then
+            echo "skip_property=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_property=false" >> $GITHUB_OUTPUT
+          fi

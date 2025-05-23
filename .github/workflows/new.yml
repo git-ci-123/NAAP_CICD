@@ -136,4 +136,14 @@ jobs:
             echo "skip_property=true" >> $GITHUB_OUTPUT
           else
             echo "skip_property=false" >> $GITHUB_OUTPUT
+      
+            
+            echo "$property_file" | tr ',' '\n' | while read -r prop; do
+              prop_path="NAAP_Release/${release_folder}/${prop}"
+              if [ ! -f "$prop_path" ]; then
+                echo "ERROR: Property file '$prop' not found at expected location: $prop_path"
+                exit 1
+              fi
+            done
           fi
+
